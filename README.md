@@ -1,1 +1,108 @@
-# Sweet-Juniper-Quilts-Website
+# Sweet Juniper Quilts
+
+A React and TypeScript storefront foundation with an Express API, Supabase PostgreSQL database, and a lightweight local-first introduction. The introduction appears immediately on the customer-facing static site while it wakes the separate API service; it transitions into the storefront in place when the API and its initial data are ready.
+
+## Architecture
+
+- `client/` is the one customer-facing React app. Render deploys it as a **Static Site** on the custom customer domain.
+- `server/` is an independently deployable Express **Web Service**. Point a dedicated API subdomain (for example, `api.yourdomain.com`) to this service.
+- The frontend talks to the server using `VITE_API_BASE_URL`. It does not connect to Supabase or contain server secrets.
+- The Express server uses the Supabase service-role key only on the server. Its database client bypasses RLS, so protected routes must authenticate and authorize each operation with the server middleware.
+- `supabase/migrations/` contains versioned, additive SQL migrations. Row Level Security is enabled for application tables; only published catalog and homepage content have public read policies. Orders and administrative data have no public policies.
+- Cloudinary, PayPal, and Resend credentials and operations belong on the server; integrations and commerce workflows are intentionally not implemented in this foundation.
+
+The intro uses three small, locally bundled original quilt-pattern illustrations in `client/public/images/intro/`, so it never needs the API or a third-party image host to render. They are illustrative stand-ins, not supplied product photography; replace them with appropriately licensed, optimized quilt and kinusaiga photos when available.
+
+## Requirements
+
+- Node.js 20 or newer and npm
+- Supabase CLI (for linking the project and applying migrations)
+- A Supabase project for database-backed API readiness
+
+## Install and run locally
+
+From the repository root:
+
+```sh
+npm install
+```
+
+Copy `.env.example` to `.env` and fill in the server's Supabase project URL and service-role key. Keep `.env` private and never use a service-role key in a `VITE_` variable. Then start the API and frontend:
+
+```sh
+npm run dev
+```
+
+The API listens on `http://localhost:3001`; Vite serves the frontend on `http://localhost:5173`. The opening presentation appears before any API response. It probes `/api/health` immediately to wake the service, then periodically checks `/api/ready` for database readiness. Only after readiness does it request `/api/storefront/bootstrap` and transition to the storefront shell. If the API does not become available within two minutes, the intro remains visible and offers a retry button.
+
+Useful commands:
+
+```sh
+npm run build       # Type-check and build the frontend and server
+npm run lint        # Lint client, server, and shared TypeScript
+npm test            # Run focused API tests
+npm run dev:client  # Run only Vite
+npm run dev:server  # Run only Express
+```
+
+## Environment configuration
+
+`.env.example` documents the variables without containing credentials:
+
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase connection settings.
+- `OWNER_USER_ID`: Supabase Auth user UUID allowed by the owner authorization middleware.
+- `CLIENT_ORIGIN`: comma-separated allowed browser origins (local Vite origin by default).
+- `SERVER_PORT`: local Express port.
+- `VITE_API_BASE_URL`: API origin used by Vite at build time (defaults to `http://localhost:3001` locally).
+
+For production, set `VITE_API_BASE_URL` to the HTTPS API subdomain in the Render Static Site's build environment. Set `CLIENT_ORIGIN` on the Render Web Service to the HTTPS customer domain. Vite variables are public build-time configuration; never put credentials or private keys in them. Render static-site builds must be redeployed after changing build environment variables.
+
+## Supabase setup and migrations
+
+1. Install the [Supabase CLI](https://supabase.com/docs/guides/cli) and create a Supabase project.
+2. Link this checkout to the project:
+
+   ```sh
+   supabase login
+   supabase link --project-ref YOUR_PROJECT_REF
+   ```
+
+3. Apply the committed migrations:
+
+   ```sh
+   supabase db push
+   ```
+
+   The initial migration creates catalog, media, order snapshots, payment, fulfillment, homepage, email-log, and audit tables; enables RLS; and adds only the public read policies needed for published catalog and homepage content. It does not delete or overwrite existing data. The seed file is intentionally empty.
+
+4. Put the project URL and **service-role** key in the local `.env` file. Obtain them from the Supabase project's API settings. Never commit the key or expose it to Vite.
+5. Start the app and check `http://localhost:3001/api/ready`. It returns ready only after the API can query the migrated database. `/api/health` is a lightweight process health check used to wake the Render service and does not expose database details.
+
+The `requireOwner` middleware verifies the bearer token with Supabase Auth and compares its user ID with `OWNER_USER_ID`. Use it on owner-only routes as those routes are introduced. Request validation helpers and a generic error boundary are provided; no sensitive database or provider operation is exposed to the browser.
+
+## Render deployment
+
+Create two Render services from this GitHub repository; do not point the customer domain at the sleeping API.
+
+**Static Site (customer domain)**
+
+- Root directory: repository root
+- Build command: `npm ci && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/client`
+- Publish directory: `client/dist`
+- Build environment: `VITE_API_BASE_URL=https://api.yourdomain.com`
+- Add the custom customer domain to this Static Site and configure its DNS as Render instructs.
+- Add an SPA rewrite from `/*` to `/index.html` with status `200`.
+
+**Web Service (API subdomain)**
+
+- Root directory: repository root
+- Build command: `npm ci && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/server`
+- Start command: `npm run start --workspace @sweet-juniper/server`
+- Set `NODE_ENV=production`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, and `CLIENT_ORIGIN=https://yourdomain.com`.
+- Add `api.yourdomain.com` as a custom domain to this Web Service and configure its DNS as Render instructs. Render terminates HTTPS for both services.
+
+The two services deploy independently from the same GitHub repository. The frontend boot animation remains usable while the Web Service starts; the client hides startup/network errors and only shows a friendly retry message.
+
+## Scope and next steps
+
+This is the project foundation, not a finished e-commerce site. It includes a minimal storefront shell and the initial schema/API boundary; product administration, owner sign-in UI, inventory workflows, cart/order processing, PayPal, Cloudinary uploads, and Resend delivery remain future work. Before production, supply licensed quilt/kinusaiga photos, configure the Supabase and Render projects, deploy each service, apply the migration, and verify the HTTPS API origin/CORS settings.

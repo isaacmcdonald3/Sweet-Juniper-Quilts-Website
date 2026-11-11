@@ -1,0 +1,13 @@
+node_modules/
+**/node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
+
+# Supabase local development state
+supabase/.branches/
+supabase/.temp/

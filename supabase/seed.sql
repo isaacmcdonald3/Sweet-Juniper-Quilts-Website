@@ -1,0 +1,1 @@
+-- No sample products or customer records are inserted by the foundation.

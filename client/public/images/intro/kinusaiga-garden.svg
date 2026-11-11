@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <defs>
+    <pattern id="fabric" width="320" height="320" patternUnits="userSpaceOnUse">
+      <rect width="320" height="320" fill="#a86750"/>
+      <path d="M0 0h160v160H0z" fill="#d1ac7d"/>
+      <path d="M160 160h160v160H160z" fill="#667a5e"/>
+      <path d="M160 0h160v160H160z" fill="#e5d5b9"/>
+      <path d="M0 160h160v160H0z" fill="#778c78"/>
+      <path d="M80 0c0 52-28 80-80 80M240 0c0 52 28 80 80 80M0 240c52 0 80 28 80 80m160-80c0 52 28 80 80 80" fill="none" stroke="#f4e4c9" stroke-width="4"/>
+      <path d="M160 42c17 24 31 35 56 41-25 7-39 20-56 47-17-27-31-40-56-47 25-6 39-17 56-41z" fill="#a86750" stroke="#f4e4c9" stroke-width="4"/>
+      <path d="M42 160c17 24 31 35 56 41-25 7-39 20-56 47-17-27-31-40-56-47 25-6 39-17 56-41z" fill="#d0a878" stroke="#f4e4c9" stroke-width="4"/>
+      <circle cx="160" cy="160" r="13" fill="#f4e4c9"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="#d8c3a2"/>
+  <rect x="-40" y="-20" width="1680" height="1040" rx="26" fill="url(#fabric)" stroke="#f0ddbd" stroke-width="18"/>
+  <rect x="34" y="34" width="1532" height="932" rx="4" fill="none" stroke="#f4e4c9" stroke-width="4" stroke-dasharray="3 13" opacity=".8"/>
+</svg>

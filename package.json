@@ -1,0 +1,25 @@
+{
+  "name": "sweet-juniper-quilts",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "packages/shared"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @sweet-juniper/shared",
+    "dev": "npm run build:shared && concurrently -k -n api,web -c blue,green \"npm run dev --workspace @sweet-juniper/server\" \"npm run dev --workspace @sweet-juniper/client\"",
+    "dev:client": "npm run build:shared && npm run dev --workspace @sweet-juniper/client",
+    "dev:server": "npm run build:shared && npm run dev --workspace @sweet-juniper/server",
+    "build": "npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/client && npm run build --workspace @sweet-juniper/server",
+    "lint": "npm run lint --workspace @sweet-juniper/shared && npm run lint --workspace @sweet-juniper/client && npm run lint --workspace @sweet-juniper/server",
+    "test": "npm test --workspace @sweet-juniper/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

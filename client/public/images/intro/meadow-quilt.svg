@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+  <defs>
+    <pattern id="blocks" width="300" height="300" patternUnits="userSpaceOnUse" patternTransform="rotate(5)">
+      <rect width="300" height="300" fill="#e1cda8"/>
+      <path d="M0 0h150v150H0z" fill="#657a62"/>
+      <path d="M150 0h150v150H150z" fill="#b96e54"/>
+      <path d="M0 150h150v150H0z" fill="#d8a977"/>
+      <path d="M150 150h150v150H150z" fill="#718577"/>
+      <path d="m75 30 18 27 32 7-23 23 4 33-31-15-31 15 4-33-23-23 32-7z" fill="#f4e4c9"/>
+      <path d="M225 168c-28 0-40 23-25 43-16 18-3 44 25 44s41-26 25-44c15-20 3-43-25-43z" fill="none" stroke="#f4e4c9" stroke-width="7"/>
+      <path d="M0 0h300M0 150h300M0 300h300M0 0v300M150 0v300M300 0v300" fill="none" stroke="#f6ead5" stroke-width="3"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="#c9b18f"/>
+  <rect x="-45" y="-25" width="1690" height="1050" rx="28" fill="url(#blocks)" stroke="#f0ddbd" stroke-width="18"/>
+  <path d="M36 36h1528v928H36z" fill="none" stroke="#f4e4c9" stroke-width="5" stroke-dasharray="4 14" opacity=".8"/>
+</svg>
