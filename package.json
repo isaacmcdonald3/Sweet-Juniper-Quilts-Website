@@ -13,10 +13,11 @@
     "dev:server": "npm run build:shared && npm run dev --workspace @sweet-juniper/server",
     "build": "npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/client && npm run build --workspace @sweet-juniper/server",
     "lint": "npm run lint --workspace @sweet-juniper/shared && npm run lint --workspace @sweet-juniper/client && npm run lint --workspace @sweet-juniper/server",
-    "test": "npm test --workspace @sweet-juniper/server"
+    "test": "npm test --workspace @sweet-juniper/client && npm test --workspace @sweet-juniper/server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "supabase": "^3.1.0",
     "typescript": "^5.8.3"
   },
   "engines": {

@@ -1,14 +1,30 @@
 import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import { pinoHttp } from "pino-http";
-import type { StorefrontBootstrap } from "@sweet-juniper/shared";
+import { z } from "zod";
+import type {
+  CatalogCategory,
+  CatalogProduct,
+  ProductListFilters,
+  StorefrontBootstrap,
+  StorefrontHomepage,
+} from "@sweet-juniper/shared";
 import type { Logger } from "pino";
+
+const productFiltersSchema = z.object({
+  category: z.string().uuid().optional(),
+  featured: z.enum(["true", "false"]).transform((value) => value === "true").optional(),
+});
 
 export interface AppServices {
   allowedOrigins: string[];
   logger: Logger;
   checkDatabase: () => Promise<boolean>;
   loadBootstrap: () => Promise<StorefrontBootstrap>;
+  loadHomepage: () => Promise<StorefrontHomepage>;
+  listCategories: () => Promise<CatalogCategory[]>;
+  listProducts: (filters: ProductListFilters) => Promise<CatalogProduct[]>;
+  getProduct: (slug: string) => Promise<CatalogProduct | null>;
 }
 
 export function createApp(services: AppServices) {
@@ -43,6 +59,58 @@ export function createApp(services: AppServices) {
   app.get("/api/storefront/bootstrap", async (_request, response, next) => {
     try {
       response.json(await services.loadBootstrap());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/storefront/homepage", async (_request, response, next) => {
+    try {
+      response.json(await services.loadHomepage());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/categories", async (_request, response, next) => {
+    try {
+      response.json(await services.listCategories());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/products", async (request, response, next) => {
+    const parsedFilters = productFiltersSchema.safeParse(request.query);
+    if (!parsedFilters.success) {
+      response.status(400).json({ error: "Product filters are invalid." });
+      return;
+    }
+
+    try {
+      response.json(await services.listProducts({
+        categoryId: parsedFilters.data.category,
+        featured: parsedFilters.data.featured,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/products/:slug", async (request, response, next) => {
+    const parsedSlug = z.string().trim().min(1).max(160).safeParse(request.params.slug);
+    if (!parsedSlug.success) {
+      response.status(400).json({ error: "Product address is invalid." });
+      return;
+    }
+
+    try {
+      const product = await services.getProduct(parsedSlug.data);
+      if (!product) {
+        response.status(404).json({ error: "Product not found." });
+        return;
+      }
+      response.json(product);
     } catch (error) {
       next(error);
     }

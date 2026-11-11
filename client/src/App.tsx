@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import type { StorefrontBootstrap } from "@sweet-juniper/shared";
+import { BrowserRouter } from "react-router-dom";
+import type { StorefrontHomepage } from "@sweet-juniper/shared";
+import { StorefrontApplication } from "./StorefrontApplication";
+import { requestApi } from "./services/storefront-api";
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3001").replace(
-  /\/+$/,
-  "",
-);
 const maxWaitMs = 120_000;
 const retryDelays = [1_000, 2_000, 5_000, 8_000];
 
@@ -13,7 +12,7 @@ type View = "intro" | "unavailable" | "transitioning" | "storefront";
 function App() {
   const [view, setView] = useState<View>("intro");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [storefront, setStorefront] = useState<StorefrontBootstrap | null>(null);
+  const [storefront, setStorefront] = useState<StorefrontHomepage | null>(null);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
@@ -40,10 +39,7 @@ function App() {
       request = controller;
       const timeout = setTimeout(() => controller.abort(), 8_000);
       try {
-        return await fetch(`${apiBaseUrl}${path}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
+        return await requestApi(path, controller.signal);
       } finally {
         clearTimeout(timeout);
         if (request === controller) request = undefined;
@@ -67,9 +63,9 @@ function App() {
         if (health.ok) {
           const ready = await fetchApi("/api/ready");
           if (ready.ok) {
-            const response = await fetchApi("/api/storefront/bootstrap");
+            const response = await fetchApi("/api/storefront/homepage");
             if (response.ok) {
-              const data = (await response.json()) as StorefrontBootstrap;
+              const data = (await response.json()) as StorefrontHomepage;
               if (active && Date.now() - startedAt < maxWaitMs) {
                 clearTimeout(deadlineTimer);
                 setStorefront(data);
@@ -110,12 +106,22 @@ function App() {
   }, [retry]);
 
   if (view === "storefront") {
-    return <Storefront data={storefront} />;
+    return storefront ? (
+      <BrowserRouter>
+        <StorefrontApplication data={storefront} />
+      </BrowserRouter>
+    ) : null;
   }
 
   return (
     <>
-      {view === "transitioning" && <Storefront data={storefront} faded />}
+      {view === "transitioning" && storefront && (
+        <div className="storefront-underlay" aria-hidden="true">
+          <BrowserRouter>
+            <StorefrontApplication data={storefront} />
+          </BrowserRouter>
+        </div>
+      )}
       <Introduction
         unavailable={view === "unavailable"}
         waiting={elapsedSeconds >= 15}
@@ -182,72 +188,6 @@ function Introduction({
         <span />
         <span />
       </div>
-    </main>
-  );
-}
-
-function Storefront({
-  data,
-  faded = false,
-}: {
-  data: StorefrontBootstrap | null;
-  faded?: boolean;
-}) {
-  return (
-    <main className={`store ${faded ? "store--arriving" : ""}`}>
-      <header className="store__header">
-        <a className="brand" href="/" aria-label="Sweet Juniper Quilts home">
-          <span className="brand__mark" aria-hidden="true">
-            ✳
-          </span>
-          <span>{data?.shopName || "Sweet Juniper Quilts"}</span>
-        </a>
-        <span className="store__note">HANDMADE WITH HEART</span>
-      </header>
-      <section className="store__welcome">
-        <p className="eyebrow">A WARM WELCOME</p>
-        <h1>{data?.welcomeMessage || "A little warmth, stitched to last."}</h1>
-        <p>Thoughtful quilts and kinusaiga art, made to bring joy to your home.</p>
-      </section>
-      <section className="store__collection" aria-labelledby="collection-title">
-        <div>
-          <p className="eyebrow">MADE WITH CARE</p>
-          <h2 id="collection-title">A home for handmade</h2>
-        </div>
-        {data?.categories.length ? (
-          <ul className="category-list">
-            {data.categories.map((category) => (
-              <li key={category.id}>{category.name}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="store__coming">Our collection is being prepared. Please visit again soon.</p>
-        )}
-      </section>
-      {data?.featuredProducts.length ? (
-        <section className="product-list" aria-label="Featured pieces">
-          {data.featuredProducts.map((product) => (
-            <article className="product-card" key={product.id}>
-              {product.media[0] ? (
-                <img src={product.media[0].url} alt={product.media[0].altText || product.name} />
-              ) : (
-                <div className="product-card__placeholder" aria-hidden="true">
-                  ✳
-                </div>
-              )}
-              <h3>{product.name}</h3>
-              <p>{product.description}</p>
-              <span>
-                {new Intl.NumberFormat(undefined, {
-                  style: "currency",
-                  currency: product.currency,
-                }).format(product.price)}
-              </span>
-            </article>
-          ))}
-        </section>
-      ) : null}
-      <footer className="store__footer">Sweet Juniper Quilts · Made slowly. Meant to be cherished.</footer>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 # Sweet Juniper Quilts
 
-A React and TypeScript storefront foundation with an Express API, Supabase PostgreSQL database, and a lightweight local-first introduction. The introduction appears immediately on the customer-facing static site while it wakes the separate API service; it transitions into the storefront in place when the API and its initial data are ready.
+A React and TypeScript storefront with an Express API, Supabase PostgreSQL database, and a lightweight local-first introduction. The introduction appears immediately on the customer-facing static site while it wakes the separate API service; it transitions into the homepage in place when the API and initial published data are ready.
 
 ## Architecture
 
@@ -9,6 +9,8 @@ A React and TypeScript storefront foundation with an Express API, Supabase Postg
 - The frontend talks to the server using `VITE_API_BASE_URL`. It does not connect to Supabase or contain server secrets.
 - The Express server uses the Supabase service-role key only on the server. Its database client bypasses RLS, so protected routes must authenticate and authorize each operation with the server middleware.
 - `supabase/migrations/` contains versioned, additive SQL migrations. Row Level Security is enabled for application tables; only published catalog and homepage content have public read policies. Orders and administrative data have no public policies.
+- The customer catalog, detail pages, and featured homepage pieces are read from the existing Supabase tables through the API. Public API queries explicitly filter out unpublished and archived products because the server's service-role key bypasses RLS.
+- The existing `GET /api/storefront/bootstrap` contract is retained. The storefront uses `GET /api/storefront/homepage`, `GET /api/categories`, `GET /api/products`, and `GET /api/products/:slug` for its richer customer views.
 - Cloudinary, PayPal, and Resend credentials and operations belong on the server; integrations and commerce workflows are intentionally not implemented in this foundation.
 
 The intro uses three small, locally bundled original quilt-pattern illustrations in `client/public/images/intro/`, so it never needs the API or a third-party image host to render. They are illustrative stand-ins, not supplied product photography; replace them with appropriately licensed, optimized quilt and kinusaiga photos when available.
@@ -33,14 +35,18 @@ Copy `.env.example` to `.env` and fill in the server's Supabase project URL and 
 npm run dev
 ```
 
-The API listens on `http://localhost:3001`; Vite serves the frontend on `http://localhost:5173`. The opening presentation appears before any API response. It probes `/api/health` immediately to wake the service, then periodically checks `/api/ready` for database readiness. Only after readiness does it request `/api/storefront/bootstrap` and transition to the storefront shell. If the API does not become available within two minutes, the intro remains visible and offers a retry button.
+The API listens on `http://localhost:3001`; Vite serves the frontend on `http://localhost:5173`. The opening presentation appears before any API response. It probes `/api/health` immediately to wake the service, then periodically checks `/api/ready` for database readiness. Only after readiness does it request `/api/storefront/homepage` and transition to the storefront. If the API does not become available within two minutes, the intro remains visible and offers a retry button.
+
+The catalog search, category filter, and sorting operate on the published records returned by the API. Cart state exists only in memory for the current browser session; there is no local product database, localStorage persistence, or checkout/payment flow. Before a future checkout is added, the server must reload each product and validate its current price and available quantity from Supabase.
+
+Homepage copy is read from published rows in `homepage_content`. The `home` row may contain `title`, `introduction`, `eyebrow`, `imageUrl`, `imageAlt`, or `videoUrl`; the `about` row may contain `title`, `body`, and `imageUrl`; `contact` may contain `email`. `shipping` and `privacy` rows may contain `title` and `body`. When a row or field is absent, the page displays temporary copy. Featured products are managed by the existing `products.is_featured` flag and their existing `product_media` rows. No new table or migration was needed for this phase.
 
 Useful commands:
 
 ```sh
 npm run build       # Type-check and build the frontend and server
 npm run lint        # Lint client, server, and shared TypeScript
-npm test            # Run focused API tests
+npm test            # Run cart-state and API tests
 npm run dev:client  # Run only Vite
 npm run dev:server  # Run only Express
 ```
@@ -82,7 +88,7 @@ The `requireOwner` middleware verifies the bearer token with Supabase Auth and c
 
 ## Render deployment
 
-Create two Render services from this GitHub repository; do not point the customer domain at the sleeping API.
+Create two Render services from this GitHub repository; do not point the customer domain at the sleeping API. The customer stays on the same static-site domain after the intro fades—the frontend calls the API in the background rather than redirecting to the backend host.
 
 **Static Site (customer domain)**
 
@@ -105,4 +111,4 @@ The two services deploy independently from the same GitHub repository. The front
 
 ## Scope and next steps
 
-This is the project foundation, not a finished e-commerce site. It includes a minimal storefront shell and the initial schema/API boundary; product administration, owner sign-in UI, inventory workflows, cart/order processing, PayPal, Cloudinary uploads, and Resend delivery remain future work. Before production, supply licensed quilt/kinusaiga photos, configure the Supabase and Render projects, deploy each service, apply the migration, and verify the HTTPS API origin/CORS settings.
+The customer homepage, published catalog, product detail pages, and in-memory cart are implemented. Product administration, owner sign-in UI, inventory workflows, cart/order processing, PayPal, Cloudinary uploads, and Resend delivery remain future work. Before production, supply licensed quilt/kinusaiga photos and business contact/policy text, configure the Supabase and Render projects, deploy each service, and verify the HTTPS API origin/CORS settings. The existing initial migration is already applied to the linked Supabase project; this phase adds no database migration.
