@@ -11,8 +11,8 @@
     "test": "tsx --test src/app.test.ts"
   },
   "dependencies": {
-    "@sweet-juniper/shared": "1.0.0",
     "@supabase/supabase-js": "^2.49.4",
+    "@sweet-juniper/shared": "1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^5.1.0",
@@ -21,11 +21,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.13.10",
-    "@types/supertest": "^6.0.2",
-    "supertest": "^7.1.0",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.3.2",
     "tsx": "^4.19.3"
   }
 }
