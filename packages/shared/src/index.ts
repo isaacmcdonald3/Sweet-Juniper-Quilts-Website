@@ -32,9 +32,11 @@ export type ProductMediaType = "image" | "video";
 
 export interface CatalogProductMedia {
   id: string;
+  cloudinaryAssetId: string;
   mediaType: ProductMediaType;
   url: string;
   altText: string | null;
+  posterUrl: string | null;
   isPrimary: boolean;
   sortOrder: number;
 }
@@ -63,6 +65,29 @@ export interface StorefrontHomepage {
   content: Record<string, unknown>;
   categories: CatalogCategory[];
   featuredProducts: CatalogProduct[];
+  mediaLibrary?: CatalogProductMedia[];
+  publishedSections?: Record<string, boolean>;
+}
+
+export interface AdminProductMedia extends CatalogProductMedia {
+  productId: string;
+  productName: string;
+  cloudinaryPublicId: string;
+  posterCloudinaryAssetId: string | null;
+  posterCloudinaryPublicId: string | null;
+  deletedAt: string | null;
+  cleanupPendingAssets: Array<
+    | { publicId: string; resourceType: "image" | "video" }
+    | { assetId: string; resourceType: "image" | "video" }
+  >;
+}
+
+export interface CloudinaryUploadLimits {
+  configured: boolean;
+  imageMaxBytes: number;
+  videoMaxBytes: number;
+  imageMimeTypes: string[];
+  videoMimeTypes: string[];
 }
 
 export interface AdminProduct extends CatalogProduct {

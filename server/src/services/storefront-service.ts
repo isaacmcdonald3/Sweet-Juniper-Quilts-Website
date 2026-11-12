@@ -6,9 +6,10 @@ import type {
   StorefrontBootstrap,
   StorefrontHomepage,
 } from "@sweet-juniper/shared";
+import type { CloudinaryMediaClient } from "./cloudinary-service.js";
 
 const productSelection =
-  "id,name,slug,description,price,sku,category_id,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_type,media_url,alt_text,is_primary,sort_order)";
+  "id,name,slug,description,price,sku,category_id,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_cloudinary_public_id,poster_url,deleted_at)";
 
 function mapCategory(category: {
   id: string;
@@ -49,18 +50,33 @@ function mapProduct(row: {
   product_media: Array<{
     id: string;
     media_type: "image" | "video";
+    cloudinary_asset_id: string;
+    cloudinary_public_id: string | null;
     media_url: string;
     alt_text: string | null;
     is_primary: boolean;
     sort_order: number;
+    poster_cloudinary_asset_id: string | null;
+    poster_cloudinary_public_id: string | null;
+    poster_url: string | null;
+    deleted_at: string | null;
   }> | null;
-}): CatalogProduct {
+}, cloudinary?: CloudinaryMediaClient): CatalogProduct {
   const media = (row.product_media || [])
+    .filter((item) => !item.deleted_at)
     .map((item) => ({
       id: item.id,
+      cloudinaryAssetId: item.cloudinary_asset_id,
       mediaType: item.media_type,
-      url: item.media_url,
+      url: item.cloudinary_public_id
+        ? cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url
+        : item.media_url,
       altText: item.alt_text,
+      posterUrl: item.poster_cloudinary_asset_id
+        ? item.poster_cloudinary_public_id
+          ? cloudinary?.deliveryUrl(item.poster_cloudinary_public_id, "image") || item.poster_url
+          : item.poster_url
+        : null,
       isPrimary: item.is_primary,
       sortOrder: item.sort_order,
     }))
@@ -83,7 +99,10 @@ function mapProduct(row: {
   };
 }
 
-export function createStorefrontService(supabase: SupabaseClient) {
+export function createStorefrontService(
+  supabase: SupabaseClient,
+  cloudinary?: CloudinaryMediaClient,
+) {
   async function checkDatabase(): Promise<boolean> {
     const { error } = await supabase.from("products").select("id", { head: true, count: "exact" }).limit(0);
     return !error;
@@ -112,7 +131,7 @@ export function createStorefrontService(supabase: SupabaseClient) {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data.map(mapProduct);
+    return data.map((row) => mapProduct(row, cloudinary));
   }
 
   async function getProduct(slug: string): Promise<CatalogProduct | null> {
@@ -124,24 +143,34 @@ export function createStorefrontService(supabase: SupabaseClient) {
       .is("archived_at", null)
       .maybeSingle();
     if (error) throw error;
-    return data ? mapProduct(data) : null;
+    return data ? mapProduct(data, cloudinary) : null;
   }
 
   async function loadHomepage(): Promise<StorefrontHomepage> {
-    const [categories, featuredProducts, contentResult] = await Promise.all([
+    const [categories, products, contentResult] = await Promise.all([
       listCategories(),
-      listProducts({ featured: true }),
+      listProducts(),
       supabase
         .from("homepage_content")
-        .select("content_key,content")
-        .eq("is_published", true),
+        .select("content_key,content,is_published"),
     ]);
 
     if (contentResult.error) throw contentResult.error;
     const content = Object.fromEntries(
-      contentResult.data.map((row) => [row.content_key, row.content as unknown]),
+      contentResult.data
+        .filter((row) => row.is_published)
+        .map((row) => [row.content_key, row.content as unknown]),
     );
-    return { content, categories, featuredProducts };
+    const publishedSections = Object.fromEntries(
+      contentResult.data.map((row) => [row.content_key, row.is_published]),
+    );
+    return {
+      content,
+      categories,
+      featuredProducts: products.filter((product) => product.isFeatured),
+      mediaLibrary: products.flatMap((product) => product.media),
+      publishedSections,
+    };
   }
 
   async function loadBootstrap(): Promise<StorefrontBootstrap> {

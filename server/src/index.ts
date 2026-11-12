@@ -4,6 +4,8 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createStorefrontService } from "./services/storefront-service.js";
 import { createAdminService } from "./services/admin-service.js";
+import { createCloudinaryService } from "./services/cloudinary-service.js";
+import { createMediaService } from "./services/media-service.js";
 import { logger } from "./logger.js";
 
 const config = loadConfig();
@@ -14,8 +16,13 @@ const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_
   },
 });
 
-const storefront = createStorefrontService(supabase);
+const cloudinary = createCloudinaryService(config.cloudinary, logger, {
+  imageMaxBytes: config.CLOUDINARY_IMAGE_MAX_BYTES,
+  videoMaxBytes: config.CLOUDINARY_VIDEO_MAX_BYTES,
+});
+const storefront = createStorefrontService(supabase, cloudinary);
 const admin = createAdminService(supabase);
+const media = createMediaService(supabase, cloudinary, logger);
 const app = createApp({
   allowedOrigins: config.allowedOrigins,
   logger,
@@ -31,6 +38,7 @@ const app = createApp({
     return error ? null : data.user?.id || null;
   },
   admin,
+  media,
 });
 
 app.listen(config.SERVER_PORT, () => {

@@ -10,7 +10,7 @@ import type {
 import type { ProductFulfillmentType } from "@sweet-juniper/shared";
 
 const productSelection =
-  "id,name,slug,description,price,sku,category_id,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,media_url,alt_text,is_primary,sort_order)";
+  "id,name,slug,description,price,sku,category_id,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
 
 export class AdminConflictError extends Error {}
 
@@ -45,10 +45,18 @@ interface CategoryRelationRow {
 interface ProductMediaRow {
   id: string;
   media_type: "image" | "video";
+  cloudinary_asset_id: string;
   media_url: string;
   alt_text: string | null;
   is_primary: boolean;
   sort_order: number;
+  poster_cloudinary_asset_id: string | null;
+  poster_url: string | null;
+  deleted_at: string | null;
+  cleanup_pending_assets: Array<
+    | { publicId: string; resourceType: "image" | "video" }
+    | { assetId: string; resourceType: "image" | "video" }
+  > | null;
 }
 
 interface AdminProductRow {
@@ -125,11 +133,14 @@ function slugify(value: string): string {
 function mapProduct(row: AdminProductRow): AdminProduct {
   const category = Array.isArray(row.categories) ? row.categories[0] : row.categories;
   const media = (row.product_media || [])
+    .filter((item) => !item.deleted_at)
     .map((item) => ({
       id: item.id,
+      cloudinaryAssetId: item.cloudinary_asset_id,
       mediaType: item.media_type,
       url: item.media_url,
       altText: item.alt_text,
+      posterUrl: item.poster_url,
       isPrimary: item.is_primary,
       sortOrder: item.sort_order,
     }))

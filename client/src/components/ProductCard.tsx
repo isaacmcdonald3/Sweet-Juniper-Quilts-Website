@@ -8,7 +8,8 @@ function availability(product: CatalogProduct): string {
 }
 
 export function ProductCard({ product }: { product: CatalogProduct }) {
-  const image = product.media.find((item) => item.mediaType === "image");
+  const image = product.media.find((item) => item.mediaType === "image" && item.isPrimary)
+    || product.media.find((item) => item.mediaType === "image");
 
   return (
     <article className="product-card">

@@ -1,5 +1,6 @@
 import cors from "cors";
-import express, { type ErrorRequestHandler, type Response } from "express";
+import express, { type ErrorRequestHandler, type RequestHandler, type Response } from "express";
+import multer from "multer";
 import { pinoHttp } from "pino-http";
 import { z } from "zod";
 import type {
@@ -11,6 +12,15 @@ import type {
 } from "@sweet-juniper/shared";
 import type { Logger } from "pino";
 import { AdminConflictError, createAdminService } from "./services/admin-service.js";
+import {
+  CloudinaryUnavailableError,
+  UploadValidationError,
+} from "./services/cloudinary-service.js";
+import {
+  MediaConflictError,
+  MediaNotFoundError,
+  createMediaService,
+} from "./services/media-service.js";
 import { requireOwner } from "./middleware/require-owner.js";
 
 const productFiltersSchema = z.object({
@@ -51,6 +61,20 @@ const homepageContentSchema = z.object({
   isPublished: z.boolean(),
 });
 
+const mediaUploadSchema = z.object({
+  mediaType: z.enum(["image", "video"]),
+  altText: z.string().max(500).optional(),
+  replaceMediaId: z.string().uuid().optional(),
+});
+
+const mediaUpdateSchema = z
+  .object({
+    altText: z.string().max(500).nullable().optional(),
+    sortOrder: z.number().int().min(0).max(1_000_000).optional(),
+    isPrimary: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0);
+
 function getOwnerId(response: Response): string {
   const ownerId: unknown = response.locals.ownerUserId;
   if (typeof ownerId !== "string") throw new Error("Owner identity is missing from the request context.");
@@ -69,6 +93,7 @@ export interface AppServices {
   getAuthenticatedUserId: (token: string) => Promise<string | null>;
   ownerUserId?: string;
   admin: ReturnType<typeof createAdminService>;
+  media: ReturnType<typeof createMediaService>;
 }
 
 export function createApp(services: AppServices) {
@@ -162,6 +187,180 @@ export function createApp(services: AppServices) {
 
   const admin = express.Router();
   admin.use(requireOwner(services.getAuthenticatedUserId, services.ownerUserId));
+
+  const requireConfiguredCloudinary: RequestHandler = (_request, response, next) => {
+    if (!services.media.configured) {
+      response.status(503).json({ error: "Media uploads are not configured yet." });
+      return;
+    }
+    next();
+  };
+  const validateProductMediaAddress: RequestHandler = (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    if (!productId.success) {
+      response.status(400).json({ error: "Product address is invalid." });
+      return;
+    }
+    next();
+  };
+  const validateVideoPosterAddress: RequestHandler = (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!productId.success || !mediaId.success) {
+      response.status(400).json({ error: "Media address is invalid." });
+      return;
+    }
+    next();
+  };
+
+  admin.get("/media/limits", (_request, response) => {
+    response.json(services.media.getUploadLimits());
+  });
+
+  admin.get("/media", async (_request, response, next) => {
+    try {
+      response.json(await services.media.listAllMedia());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.get("/products/:id/media", async (request, response, next) => {
+    const parsedId = z.string().uuid().safeParse(request.params.id);
+    if (!parsedId.success) {
+      response.status(400).json({ error: "Product address is invalid." });
+      return;
+    }
+    try {
+      response.json(await services.media.listProductMedia(parsedId.data));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post(
+    "/products/:id/media",
+    requireConfiguredCloudinary,
+    validateProductMediaAddress,
+    services.media.uploadMiddleware,
+    async (request, response, next) => {
+      const parsedId = z.string().uuid().safeParse(request.params.id);
+      const parsed = mediaUploadSchema.safeParse(request.body);
+      if (!parsedId.success || !parsed.success || !request.file) {
+        response.status(400).json({ error: "Choose a supported media file and provide valid details." });
+        return;
+      }
+      try {
+        const result = await services.media.uploadProductMedia(
+          getOwnerId(response),
+          parsedId.data,
+          request.file,
+          parsed.data.mediaType,
+          parsed.data.altText?.trim() || null,
+          parsed.data.replaceMediaId,
+        );
+        response.status(201).json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  admin.patch("/products/:id/media/:mediaId", async (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    const parsed = mediaUpdateSchema.safeParse(request.body);
+    if (!productId.success || !mediaId.success || !parsed.success) {
+      response.status(400).json({ error: "Media details are invalid." });
+      return;
+    }
+    try {
+      response.json(
+        await services.media.updateProductMedia(
+          getOwnerId(response),
+          productId.data,
+          mediaId.data,
+          parsed.data,
+        ),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.delete("/products/:id/media/:mediaId", async (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!productId.success || !mediaId.success) {
+      response.status(400).json({ error: "Media address is invalid." });
+      return;
+    }
+    try {
+      response.json(
+        await services.media.removeProductMedia(getOwnerId(response), productId.data, mediaId.data),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post(
+    "/products/:id/media/:mediaId/poster",
+    requireConfiguredCloudinary,
+    validateVideoPosterAddress,
+    services.media.uploadMiddleware,
+    async (request, response, next) => {
+      const productId = z.string().uuid().safeParse(request.params.id);
+      const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+      if (!productId.success || !mediaId.success || !request.file) {
+        response.status(400).json({ error: "Choose a supported poster image." });
+        return;
+      }
+      try {
+        response.json(
+          await services.media.setVideoPoster(
+            getOwnerId(response),
+            productId.data,
+            mediaId.data,
+            request.file,
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  admin.delete("/products/:id/media/:mediaId/poster", async (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!productId.success || !mediaId.success) {
+      response.status(400).json({ error: "Media address is invalid." });
+      return;
+    }
+    try {
+      response.json(
+        await services.media.removeVideoPoster(getOwnerId(response), productId.data, mediaId.data),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post("/media/:mediaId/retry-cleanup", async (request, response, next) => {
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!mediaId.success) {
+      response.status(400).json({ error: "Media address is invalid." });
+      return;
+    }
+    try {
+      response.json(
+        await services.media.retryProductMediaCleanup(getOwnerId(response), mediaId.data),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
 
   admin.get("/overview", async (_request, response, next) => {
     try {
@@ -347,6 +546,29 @@ export function createApp(services: AppServices) {
             ? "This record is still in use and cannot be removed."
             : "A record with the same name or SKU already exists.";
       response.status(409).json({ error: message });
+      return;
+    }
+    if (error instanceof MediaConflictError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof MediaNotFoundError) {
+      response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof UploadValidationError) {
+      response.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CloudinaryUnavailableError) {
+      response.status(503).json({ error: error.message });
+      return;
+    }
+    if (error instanceof multer.MulterError) {
+      const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+      response.status(status).json({
+        error: status === 413 ? "This file exceeds the maximum upload size." : "Media upload details are invalid.",
+      });
       return;
     }
     response.status(500).json({ error: "The request could not be completed." });

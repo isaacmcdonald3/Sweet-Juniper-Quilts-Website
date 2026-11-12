@@ -15,7 +15,7 @@ export function ProductGallery({
     <div className="product-gallery">
       <div className="product-gallery__stage">
         {selected?.mediaType === "video" ? (
-          <video controls playsInline poster={media.find((item) => item.mediaType === "image")?.url}>
+          <video controls playsInline poster={selected.posterUrl || media.find((item) => item.mediaType === "image")?.url}>
             <source src={selected.url} />
             Your browser does not support video playback.
           </video>
@@ -38,9 +38,11 @@ export function ProductGallery({
               type="button"
             >
               {item.mediaType === "video" ? (
-                <span className="product-gallery__video-thumb" aria-hidden="true">▶</span>
+                item.posterUrl
+                  ? <img alt="" loading="lazy" src={item.posterUrl} />
+                  : <span className="product-gallery__video-thumb" aria-hidden="true">▶</span>
               ) : (
-                <img src={item.url} alt="" />
+                <img loading="lazy" src={item.url} alt="" />
               )}
             </button>
           ))}

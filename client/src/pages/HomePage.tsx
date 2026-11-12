@@ -1,13 +1,38 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { StorefrontHomepage } from "@sweet-juniper/shared";
+import type { CatalogProductMedia, StorefrontHomepage } from "@sweet-juniper/shared";
 import { ProductCard } from "../components/ProductCard";
 import { getContentSection, getContentText } from "../utils/homepage-content";
+
+const defaultSectionOrder = ["categories", "featured", "about", "promotion", "contact"];
+
+function safePromotionUrl(value: string): { href: string; external: boolean } {
+  if (value.startsWith("/") && !value.startsWith("//")) return { href: value, external: false };
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:") return { href: url.href, external: true };
+  } catch {
+    // Invalid promotional links fall back to the catalog.
+  }
+  return { href: "/catalog", external: false };
+}
+
+function mediaById(data: StorefrontHomepage, id: string): CatalogProductMedia | undefined {
+  return data.mediaLibrary?.find((media) => media.id === id);
+}
 
 export function HomePage({ data }: { data: StorefrontHomepage }) {
   const home = getContentSection(data.content, "home");
   const welcome = getContentSection(data.content, "welcome");
   const about = getContentSection(data.content, "about");
   const contact = getContentSection(data.content, "contact");
+  const promotion = typeof home.promotionalContent === "object" && home.promotionalContent !== null
+    ? home.promotionalContent as Record<string, unknown>
+    : {};
+  const sectionVisibility = typeof home.sectionVisibility === "object" && home.sectionVisibility !== null
+    ? home.sectionVisibility as Record<string, unknown>
+    : {};
+
   const heroTitle = getContentText(home, "title", "A little warmth, stitched to last.");
   const heroText = getContentText(
     home,
@@ -25,37 +50,39 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
     "Sweet Juniper Quilts is a small creative studio celebrating the beauty of fabric, color, and careful handwork. Each quilt and kinusaiga piece is made with patience and a love for things meant to be treasured.",
   );
   const contactEmail = getContentText(contact, "email", "");
-  const heroVideoUrl = getContentText(home, "videoUrl", "");
-  const aboutImageUrl = getContentText(about, "imageUrl", "/images/intro/meadow-quilt.svg");
-  const heroMedia = data.featuredProducts.flatMap((product) => product.media)
+  const selectedHero = mediaById(data, getContentText(home, "heroMediaId", ""));
+  const selectedAbout = mediaById(data, getContentText(about, "mediaId", ""));
+  const selectedPromotion = mediaById(data, getContentText(promotion, "mediaId", ""));
+  const firstFeaturedImage = data.featuredProducts.flatMap((product) => product.media)
     .find((item) => item.mediaType === "image");
+  const heroVideoUrl = selectedHero?.mediaType === "video"
+    ? selectedHero.url
+    : selectedHero ? "" : getContentText(home, "videoUrl", "");
+  const heroImageUrl = selectedHero?.mediaType === "image"
+    ? selectedHero.url
+    : getContentText(home, "imageUrl", firstFeaturedImage?.url || "/images/intro/kinusaiga-garden.svg");
+  const aboutImageUrl = selectedAbout?.mediaType === "image"
+    ? selectedAbout.url
+    : getContentText(about, "imageUrl", "/images/intro/meadow-quilt.svg");
+  const posterUrl = selectedHero?.posterUrl || firstFeaturedImage?.url;
+  const visible = (key: string) =>
+    sectionVisibility[key] !== false && data.publishedSections?.[key] !== false;
+  const storedOrder = Array.isArray(home.sectionOrder) &&
+      home.sectionOrder.every((key) => typeof key === "string")
+    ? home.sectionOrder as string[]
+    : defaultSectionOrder;
+  const sectionOrder = [...new Set([
+    ...storedOrder.filter((key) => defaultSectionOrder.includes(key)),
+    ...defaultSectionOrder,
+  ])];
+  const promotionTitle = getContentText(promotion, "title", "");
+  const promotionBody = getContentText(promotion, "body", "");
+  const promotionUrl = safePromotionUrl(getContentText(promotion, "buttonUrl", "/catalog"));
+  const promotionHasContent = Boolean(promotionTitle || promotionBody);
 
-  return (
-    <main>
-      <section className="home-hero">
-        <div className="home-hero__copy">
-          <p className="eyebrow">{getContentText(home, "eyebrow", "A SMALL STUDIO · A LOT OF HEART")}</p>
-          <h1>{heroTitle}</h1>
-          <p>{heroText}</p>
-          <Link className="button button--primary" to="/catalog">Explore the collection</Link>
-        </div>
-        <div className="home-hero__art">
-          {heroVideoUrl ? (
-            <video controls playsInline poster={heroMedia?.url}>
-              <source src={heroVideoUrl} />
-              Your browser does not support video playback.
-            </video>
-          ) : (
-            <img
-              src={getContentText(home, "imageUrl", heroMedia?.url || "/images/intro/kinusaiga-garden.svg")}
-              alt={getContentText(home, "imageAlt", "Colorful handmade fabric artwork")}
-            />
-          )}
-          <span className="home-hero__caption">A little joy, made by hand</span>
-        </div>
-      </section>
-
-      <section className="home-categories section-wrap" aria-labelledby="categories-title">
+  const sections: Record<string, ReactNode> = {
+    categories: (
+      <section className="home-categories section-wrap" aria-labelledby="categories-title" key="categories">
         <div className="section-heading">
           <p className="eyebrow">FIND YOUR SOMETHING SPECIAL</p>
           <h2 id="categories-title">Made for keeping</h2>
@@ -78,8 +105,9 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
           <p className="gentle-empty">New collections are taking shape in the studio. Please check back soon.</p>
         )}
       </section>
-
-      <section className="home-featured section-wrap" aria-labelledby="featured-title">
+    ),
+    featured: (
+      <section className="home-featured section-wrap" aria-labelledby="featured-title" key="featured">
         <div className="section-heading section-heading--row">
           <div>
             <p className="eyebrow">ONE-OF-A-KIND AND MADE WITH CARE</p>
@@ -95,8 +123,9 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
           <p className="gentle-empty">Featured pieces will appear here as they are added to the collection.</p>
         )}
       </section>
-
-      <section className="home-about" id="our-story">
+    ),
+    about: (
+      <section className="home-about" id="our-story" key="about">
         <div
           className="home-about__art"
           role="img"
@@ -110,8 +139,26 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
           <a className="text-link" href="#contact">Say hello <span aria-hidden="true">→</span></a>
         </div>
       </section>
-
-      <section className="home-contact section-wrap" id="contact">
+    ),
+    promotion: promotionHasContent ? (
+      <section className="home-promotion section-wrap" key="promotion">
+        {selectedPromotion?.mediaType === "image" && (
+          <img alt={selectedPromotion.altText || ""} loading="lazy" src={selectedPromotion.url} />
+        )}
+        <div className="home-promotion__copy">
+          <p className="eyebrow">A NOTE FROM THE STUDIO</p>
+          {promotionTitle && <h2>{promotionTitle}</h2>}
+          {promotionBody && <p>{promotionBody}</p>}
+          {getContentText(promotion, "buttonText", "") && (
+            promotionUrl.external
+              ? <a className="button button--primary" href={promotionUrl.href} rel="noreferrer" target="_blank">{getContentText(promotion, "buttonText", "")}</a>
+              : <Link className="button button--primary" to={promotionUrl.href}>{getContentText(promotion, "buttonText", "")}</Link>
+          )}
+        </div>
+      </section>
+    ) : null,
+    contact: (
+      <section className="home-contact section-wrap" id="contact" key="contact">
         <p className="eyebrow">WE’D LOVE TO HEAR FROM YOU</p>
         <h2>Let’s keep in touch.</h2>
         {contactEmail ? (
@@ -124,6 +171,36 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
           <Link to="/policies/privacy">Privacy policy</Link>
         </div>
       </section>
+    ),
+  };
+
+  return (
+    <main>
+      {data.publishedSections?.home !== false && (
+        <section className="home-hero">
+          <div className="home-hero__copy">
+            <p className="eyebrow">{getContentText(home, "eyebrow", "A SMALL STUDIO · A LOT OF HEART")}</p>
+            <h1>{heroTitle}</h1>
+            <p>{heroText}</p>
+            <Link className="button button--primary" to="/catalog">Explore the collection</Link>
+          </div>
+          <div className="home-hero__art">
+            {heroVideoUrl ? (
+              <video controls playsInline poster={posterUrl}>
+                <source src={heroVideoUrl} />
+                Your browser does not support video playback.
+              </video>
+            ) : (
+              <img
+                src={heroImageUrl}
+                alt={getContentText(home, "imageAlt", "Colorful handmade fabric artwork")}
+              />
+            )}
+            <span className="home-hero__caption">A little joy, made by hand</span>
+          </div>
+        </section>
+      )}
+      {sectionOrder.map((key) => visible(key) ? sections[key] : null)}
     </main>
   );
 }

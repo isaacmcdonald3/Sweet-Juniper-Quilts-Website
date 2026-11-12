@@ -3,12 +3,16 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3001"
   "",
 );
 
+export function getApiUrl(path: string): string {
+  return `${apiBaseUrl}${path}`;
+}
+
 export function requestApi(
   path: string,
   signal?: AbortSignal,
   init: RequestInit = {},
 ): Promise<Response> {
-  return fetch(`${apiBaseUrl}${path}`, {
+  return fetch(getApiUrl(path), {
     cache: "no-store",
     signal,
     ...init,

@@ -5,6 +5,7 @@ import { OwnerDashboardHome } from "./pages/OwnerDashboardHome";
 import { OwnerHomepagePage } from "./pages/OwnerHomepagePage";
 import { OwnerOrdersPage } from "./pages/OwnerOrdersPage";
 import { OwnerPlaceholderPage } from "./pages/OwnerPlaceholderPage";
+import { OwnerMediaPage } from "./pages/OwnerMediaPage";
 import { OwnerProductsPage } from "./pages/OwnerProductsPage";
 import { OwnerDashboardLayout } from "./OwnerDashboardLayout";
 import { useOwnerAuth } from "./owner-auth";
@@ -42,7 +43,7 @@ export function OwnerRoutes() {
         <Route path="categories" element={<OwnerCategoriesPage />} />
         <Route path="orders" element={<OwnerOrdersPage />} />
         <Route path="homepage" element={<OwnerHomepagePage />} />
-        <Route path="media" element={<OwnerPlaceholderPage title="Media management" message="Secure Cloudinary uploads will be added in a later phase. Product media already remains available on public product records." />} />
+        <Route path="media" element={<OwnerMediaPage />} />
         <Route path="email-logs" element={<OwnerPlaceholderPage title="Email logs" message="Transactional email delivery and its logs are scheduled for a later phase." />} />
         <Route path="settings" element={<OwnerPlaceholderPage title="Settings" message="Store and account settings will be added when their related workflows are introduced." />} />
         <Route path="*" element={<Navigate to="/owner" replace />} />

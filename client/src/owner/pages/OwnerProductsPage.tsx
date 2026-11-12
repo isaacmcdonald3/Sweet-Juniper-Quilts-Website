@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { AdminCategory, AdminProduct, ProductFulfillmentType } from "@sweet-juniper/shared";
 import { AdminApiError, requestAdminJson } from "../../services/admin-api";
+import { ProductMediaManager } from "../components/ProductMediaManager";
 import { useAdminResource } from "../use-admin-resource";
 
 interface ProductFields {
@@ -131,6 +132,7 @@ export function OwnerProductsPage() {
             </div>
           </div>
           <button className="button button--primary" disabled={busy} type="submit">{busy ? "Saving…" : "Save product"}</button>
+          {editing.id && <ProductMediaManager productId={editing.id} />}
         </form>
       )}
       {products.loading ? <p className="owner-state" role="status">Loading products…</p> : products.data && (

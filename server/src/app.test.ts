@@ -13,6 +13,11 @@ import type {
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { createAdminService } from "./services/admin-service.js";
+import {
+  createCloudinaryService,
+  UploadValidationError,
+} from "./services/cloudinary-service.js";
+import { createMediaService } from "./services/media-service.js";
 
 const bootstrap: StorefrontBootstrap = {
   shopName: "Sweet Juniper Quilts",
@@ -24,6 +29,7 @@ const homepage: StorefrontHomepage = {
   content: {},
   categories: [],
   featuredProducts: [],
+  mediaLibrary: [],
 };
 let receivedFilters: ProductListFilters | undefined;
 let databaseReady = true;
@@ -68,6 +74,11 @@ const app = createApp({
     return null;
   },
   admin: createAdminService(createClient("https://project.supabase.co", "test-anon-key")),
+  media: createMediaService(
+    createClient("https://project.supabase.co", "test-anon-key"),
+    createCloudinaryService(undefined, pino({ enabled: false })),
+    pino({ enabled: false }),
+  ),
 });
 test("health stays available independently of database readiness", async () => {
   databaseReady = false;
@@ -134,6 +145,34 @@ test("administrative requests require the configured owner identity", async () =
     .expect(400, { error: "Product details are invalid." });
 });
 
+test("media endpoints are owner-only and report when Cloudinary is not configured", async () => {
+  await request(app).get("/api/admin/media/limits").expect(401);
+  await request(app)
+    .get("/api/admin/media/limits")
+    .set("Authorization", "Bearer customer-token")
+    .expect(403);
+  await request(app)
+    .get("/api/admin/media/limits")
+    .set("Authorization", "Bearer owner-token")
+    .expect(200, {
+      configured: false,
+      imageMaxBytes: 15_000_000,
+      videoMaxBytes: 90_000_000,
+      imageMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/avif"],
+      videoMimeTypes: ["video/mp4", "video/webm", "video/quicktime"],
+    });
+  await request(app)
+    .post("/api/admin/products/cbf8b29c-0f99-48bb-8e5e-2f246fcdd76e/media")
+    .set("Authorization", "Bearer customer-token")
+    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
+    .expect(403);
+  await request(app)
+    .post("/api/admin/products/cbf8b29c-0f99-48bb-8e5e-2f246fcdd76e/media")
+    .set("Authorization", "Bearer owner-token")
+    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
+    .expect(503, { error: "Media uploads are not configured yet." });
+});
+
 test("owner API preflight permits authenticated administrative methods", async () => {
   const response = await request(app)
     .options("/api/admin/products/product-id")
@@ -156,5 +195,36 @@ test("configuration accepts a blank optional owner ID and uses Render's port", (
   });
   assert.equal(config.SERVER_PORT, 10000);
   assert.equal(config.OWNER_USER_ID, undefined);
+  assert.equal(config.cloudinary, undefined);
   assert.deepEqual(config.allowedOrigins, ["https://shop.example", "https://www.shop.example"]);
+});
+
+test("Cloudinary credentials must be configured together", () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        SUPABASE_URL: "https://project.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "test-key",
+        CLOUDINARY_CLOUD_NAME: "test-cloud",
+      }),
+    /CLOUDINARY_API_SECRET/,
+  );
+});
+
+test("Cloudinary upload validation rejects unsupported formats and oversized files", async () => {
+  const cloudinary = createCloudinaryService({
+    cloudName: "test-cloud",
+    apiKey: "test-api-key",
+    apiSecret: "test-api-secret",
+    imageMaxBytes: 3,
+    videoMaxBytes: 4,
+  }, pino({ enabled: false }));
+  await assert.rejects(
+    cloudinary.upload(Buffer.from("x"), "application/pdf", "image", "test"),
+    UploadValidationError,
+  );
+  await assert.rejects(
+    cloudinary.upload(Buffer.from("1234"), "image/jpeg", "image", "test"),
+    UploadValidationError,
+  );
 });

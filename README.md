@@ -12,7 +12,7 @@ A React and TypeScript storefront with an Express API, Supabase PostgreSQL datab
 - The customer catalog, detail pages, and featured homepage pieces are read from the existing Supabase tables through the API. Public API queries explicitly filter out unpublished and archived products because the server's service-role key bypasses RLS.
 - The existing `GET /api/storefront/bootstrap` contract is retained. The storefront uses `GET /api/storefront/homepage`, `GET /api/categories`, `GET /api/products`, and `GET /api/products/:slug` for its richer customer views.
 - Owner sign-in uses Supabase Auth in the browser with the public anon key; all owner operations go through `/api/admin/*`, which verifies the access token and exact `OWNER_USER_ID` on the server before using its service-role database connection.
-- Cloudinary, PayPal, and Resend credentials and operations belong on the server; integrations and commerce workflows are intentionally not implemented in this foundation.
+- Product and homepage media are stored and delivered by Cloudinary. Uploads pass through owner-protected API routes; Cloudinary credentials remain server-only. PayPal and Resend workflows are not implemented yet.
 
 The intro uses three small, locally bundled original quilt-pattern illustrations in `client/public/images/intro/`, so it never needs the API or a third-party image host to render. They are illustrative stand-ins, not supplied product photography; replace them with appropriately licensed, optimized quilt and kinusaiga photos when available.
 
@@ -40,7 +40,7 @@ The API listens on `http://localhost:3001`; Vite serves the frontend on `http://
 
 The catalog search, category filter, and sorting operate on the published records returned by the API. Cart state exists only in memory for the current browser session; there is no local product database, localStorage persistence, or checkout/payment flow. Before a future checkout is added, the server must reload each product and validate its current price and available quantity from Supabase.
 
-Homepage copy is read from published rows in `homepage_content`. The `home` row may contain `title`, `introduction`, `eyebrow`, `imageUrl`, `imageAlt`, or `videoUrl`; the `about` row may contain `title`, `body`, and `imageUrl`; `contact` may contain `email`. `shipping` and `privacy` rows may contain `title` and `body`. When a row or field is absent, the page displays temporary copy. Featured products are managed by the existing `products.is_featured` flag and their existing `product_media` rows. No new table or migration was needed for this phase.
+Homepage copy is read from published rows in `homepage_content`. The Owner Dashboard manages the introduction, about copy, contact email, promotion, section visibility/order, and featured products. `home.heroMediaId`, `about.mediaId`, and `home.promotionalContent.mediaId` reference active `product_media` rows. Upload a media asset from its product editor, then select it in Homepage management. A selected media asset cannot be removed or replaced until it is unselected, preventing broken homepage references. `shipping` and `privacy` rows remain editable as custom JSON content.
 
 Useful commands:
 
@@ -81,20 +81,29 @@ For production, set `VITE_API_BASE_URL` to the HTTPS API subdomain in the Render
    supabase db push
    ```
 
-   The initial migration creates catalog, media, order snapshots, payment, fulfillment, homepage, email-log, and audit tables; enables RLS; and adds only the public read policies needed for published catalog and homepage content. It does not delete or overwrite existing data. The seed file is intentionally empty.
+   The initial migration creates catalog, media, order snapshots, payment, fulfillment, homepage, email-log, and audit tables; enables RLS; and adds public read policies for published content. Later migrations add owner policies and media poster/removal metadata without replacing existing media records. The media migration updates the public policy so removed assets are no longer returned. Migrations do not delete or overwrite existing records. The seed file is intentionally empty.
 
 4. Put the project URL and **service-role** key in the local `.env` file. Obtain them from the Supabase project's API settings. Never commit the key or expose it to Vite.
 5. Start the app and check `http://localhost:3001/api/ready`. It returns ready only after the API can query the migrated database. `/api/health` is a lightweight process health check used to wake the Render service and does not expose database details.
 
 ### Owner dashboard setup
 
-1. Apply all migrations with `supabase db push`, including `20261112000000_owner_dashboard.sql`. The migration adds a low-inventory threshold without changing existing product data, makes category deletion restrictive, and adds owner-only RLS policies based on the trusted `app_metadata.is_owner` JWT claim.
+1. Apply all migrations with `supabase db push`, including `20261112000000_owner_dashboard.sql` and `20261113000000_media_management.sql`. The owner migration adds a low-inventory threshold, restrictive category deletion, and owner-only RLS policies; the media migration adds poster and cleanup metadata to existing media rows.
 2. In the Supabase Dashboard, keep public sign-ups disabled. Create or invite the owner's account using the Supabase Auth user-management screen; there is no public registration page.
 3. Set that user's **app metadata** (not user metadata) to include `"is_owner": true`, and set the matching Auth user UUID as `OWNER_USER_ID` on the Render Web Service. The app metadata claim enables the owner-only RLS policies; the API additionally compares the authenticated user ID with `OWNER_USER_ID`. Sign out and sign in again after changing app metadata so the new claim is in the token.
 4. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` on the Render Static Site build environment. These are public client settings. Never expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
 5. Visit `/owner/login` on the customer domain. Sign in, then manage products, inventory, categories, homepage content, and read-only order details. Category archival is unpublishing; a category with linked products cannot be deleted. No owner screen can mark a payment as paid.
 
 The server-side owner middleware verifies each bearer token with Supabase Auth and compares its user ID to `OWNER_USER_ID` before admin routes execute. The service-role key bypasses RLS, so this server-side authorization remains mandatory even with owner policies in place.
+
+### Cloudinary setup
+
+1. Create or sign in to a Cloudinary account at [cloudinary.com](https://cloudinary.com/). In the Cloudinary Console, open the product environment's **API Keys** settings. Copy the **Cloud name**, **API Key**, and **API Secret**. The API Secret is private; never add it to a `VITE_` variable, the static site's build environment, or client code.
+2. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` only in the local server `.env` or the Render **Web Service** environment. The server requires all three values together. The API Key is also kept server-side.
+3. Optional upload caps are `CLOUDINARY_IMAGE_MAX_BYTES` (default 15,000,000 bytes) and `CLOUDINARY_VIDEO_MAX_BYTES` (default 90,000,000 bytes). Both are per-file limits; the video cap leaves room for multipart request overhead on the API host. The server accepts JPEG, PNG, WebP, and AVIF images, and MP4, WebM, and QuickTime/MOV videos. Your Cloudinary account plan may impose lower limits.
+4. An owner session is required for every upload, replacement, poster, and cleanup operation. The API validates the media type and size, uploads to Cloudinary from memory, and saves the immutable Cloudinary asset ID, delivery public ID, HTTPS URL, ordering, primary-image, poster, and cleanup state in the existing `product_media` table. Render's local filesystem is not used for permanent media. The browser receives upload progress but never Cloudinary credentials.
+5. In **Products**, edit a saved product to add, preview, reorder, replace, or remove media. Set an image as primary and upload or replace video posters there. In **Homepage management**, select active media belonging to published products for the introduction, about section, and promotion. Media selected on the homepage must be unselected before it can be removed or replaced.
+6. The **Media library** lists product asset IDs and pending cleanup work. A database backup preserves those records and references, but it does **not** back up the actual files in Cloudinary; arrange Cloudinary backups/export separately if needed.
 
 ## Render deployment
 
@@ -115,11 +124,12 @@ Create two Render services from this GitHub repository; do not point the custome
 - Root directory: repository root
 - Build command: `npm ci --include=dev && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/server`
 - Start command: `npm run start --workspace @sweet-juniper/server`
-- Set `NODE_ENV=production`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, and `CLIENT_ORIGIN=https://yourdomain.com`.
+- Set `NODE_ENV=production`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, `CLIENT_ORIGIN=https://yourdomain.com`, and the three server-only Cloudinary credentials.
+- Optionally set the Cloudinary per-file size limits on the Web Service. Do not copy Cloudinary credentials to the Static Site.
 - Add `api.yourdomain.com` as a custom domain to this Web Service and configure its DNS as Render instructs. Render terminates HTTPS for both services.
 
 The two services deploy independently from the same GitHub repository. The frontend boot animation remains usable while the Web Service starts; the client hides startup/network errors and only shows a friendly retry message. After applying a database migration, redeploy the API only if its code changed; no Render rebuild is required for product, category, inventory, or homepage-content changes.
 
 ## Scope and next steps
 
-The customer homepage, published catalog, product detail pages, and in-memory cart are implemented, as are owner sign-in, product/category administration, low-inventory alerts, homepage content management, and read-only orders. Secure media uploads, order fulfillment actions, customer checkout, PayPal, and Resend delivery remain future work. Before production, configure and protect the Supabase owner account, apply the new migration, supply licensed quilt/kinusaiga photos and business contact/policy text, and verify the HTTPS API origin/CORS settings.
+The customer homepage, published catalog, product detail pages, and in-memory cart are implemented, as are owner sign-in, product/category administration, low-inventory alerts, homepage management, read-only orders, and Cloudinary product media. Before production, configure and protect the Supabase owner account, apply all migrations (including `20261113000000_media_management.sql`), configure Cloudinary on the API service, supply licensed quilt/kinusaiga photos and business contact/policy text, and verify the HTTPS API origin/CORS settings. Customer checkout, PayPal, and Resend delivery remain future work.
