@@ -64,3 +64,62 @@ export interface StorefrontHomepage {
   categories: CatalogCategory[];
   featuredProducts: CatalogProduct[];
 }
+
+export interface AdminProduct extends CatalogProduct {
+  isPublished: boolean;
+  archivedAt: string | null;
+  lowInventoryThreshold: number;
+  createdAt: string;
+}
+
+export interface AdminCategory extends CatalogCategory {
+  isPublished: boolean;
+  sortOrder: number;
+}
+
+export interface AdminOrderSummary {
+  id: string;
+  orderNumber: number;
+  status: string;
+  customerName: string;
+  customerEmail: string;
+  totalAmount: number;
+  currency: string;
+  fulfillmentStatus: string;
+  createdAt: string;
+}
+
+export interface AdminOrder extends AdminOrderSummary {
+  shippingAddress: Record<string, unknown>;
+  shippingCarrier: string | null;
+  trackingNumber: string | null;
+  items: Array<{
+    id: string;
+    productName: string;
+    sku: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+  }>;
+  payments: Array<{
+    id: string;
+    provider: string;
+    status: string;
+    amount: number;
+    currency: string;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminOverview {
+  publishedProductCount: number;
+  totalOrderCount: number;
+  recentOrders: AdminOrderSummary[];
+  inventoryAlerts: AdminProduct[];
+}
+
+export interface AdminHomepageContent {
+  contentKey: string;
+  content: unknown;
+  isPublished: boolean;
+}

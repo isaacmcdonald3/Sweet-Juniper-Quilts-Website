@@ -9,6 +9,9 @@ import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PolicyPage } from "./pages/PolicyPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
+import { OwnerAuthProvider } from "./owner/owner-auth";
+import { OwnerLoginPage } from "./owner/OwnerLoginPage";
+import { OwnerRoutes } from "./owner/OwnerRoutes";
 
 export function StorefrontApplication({ data }: { data: StorefrontHomepage }) {
   const location = useLocation();
@@ -22,9 +25,11 @@ export function StorefrontApplication({ data }: { data: StorefrontHomepage }) {
   }, [location.hash, location.pathname]);
 
   return (
-    <CartProvider>
+    <OwnerAuthProvider>
       <Routes>
-        <Route element={<SiteLayout data={data} />}>
+        <Route path="/owner/login" element={<OwnerLoginPage />} />
+        <Route path="/owner/*" element={<OwnerRoutes />} />
+        <Route element={<CartProvider><SiteLayout data={data} /></CartProvider>}>
           <Route path="/" element={<HomePage data={data} />} />
           <Route path="/catalog" element={<CatalogPage data={data} />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
@@ -34,6 +39,6 @@ export function StorefrontApplication({ data }: { data: StorefrontHomepage }) {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
-    </CartProvider>
+    </OwnerAuthProvider>
   );
 }

@@ -6,11 +6,12 @@ A React and TypeScript storefront with an Express API, Supabase PostgreSQL datab
 
 - `client/` is the one customer-facing React app. Render deploys it as a **Static Site** on the custom customer domain.
 - `server/` is an independently deployable Express **Web Service**. Point a dedicated API subdomain (for example, `api.yourdomain.com`) to this service.
-- The frontend talks to the server using `VITE_API_BASE_URL`. It does not connect to Supabase or contain server secrets.
+- Storefront data uses the server configured by `VITE_API_BASE_URL`; only owner sign-in talks to Supabase Auth from the browser using the public anon key. No server secrets are sent to the client.
 - The Express server uses the Supabase service-role key only on the server. Its database client bypasses RLS, so protected routes must authenticate and authorize each operation with the server middleware.
 - `supabase/migrations/` contains versioned, additive SQL migrations. Row Level Security is enabled for application tables; only published catalog and homepage content have public read policies. Orders and administrative data have no public policies.
 - The customer catalog, detail pages, and featured homepage pieces are read from the existing Supabase tables through the API. Public API queries explicitly filter out unpublished and archived products because the server's service-role key bypasses RLS.
 - The existing `GET /api/storefront/bootstrap` contract is retained. The storefront uses `GET /api/storefront/homepage`, `GET /api/categories`, `GET /api/products`, and `GET /api/products/:slug` for its richer customer views.
+- Owner sign-in uses Supabase Auth in the browser with the public anon key; all owner operations go through `/api/admin/*`, which verifies the access token and exact `OWNER_USER_ID` on the server before using its service-role database connection.
 - Cloudinary, PayPal, and Resend credentials and operations belong on the server; integrations and commerce workflows are intentionally not implemented in this foundation.
 
 The intro uses three small, locally bundled original quilt-pattern illustrations in `client/public/images/intro/`, so it never needs the API or a third-party image host to render. They are illustrative stand-ins, not supplied product photography; replace them with appropriately licensed, optimized quilt and kinusaiga photos when available.
@@ -55,6 +56,7 @@ npm run dev:server  # Run only Express
 
 `.env.example` documents the variables without containing credentials:
 
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`: public Supabase Auth configuration for the client. The anon key is not a service-role secret.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase connection settings.
 - `OWNER_USER_ID`: Supabase Auth user UUID allowed by the owner authorization middleware.
 - `CLIENT_ORIGIN`: comma-separated allowed browser origins (local Vite origin by default).
@@ -84,7 +86,15 @@ For production, set `VITE_API_BASE_URL` to the HTTPS API subdomain in the Render
 4. Put the project URL and **service-role** key in the local `.env` file. Obtain them from the Supabase project's API settings. Never commit the key or expose it to Vite.
 5. Start the app and check `http://localhost:3001/api/ready`. It returns ready only after the API can query the migrated database. `/api/health` is a lightweight process health check used to wake the Render service and does not expose database details.
 
-The `requireOwner` middleware verifies the bearer token with Supabase Auth and compares its user ID with `OWNER_USER_ID`. Use it on owner-only routes as those routes are introduced. Request validation helpers and a generic error boundary are provided; no sensitive database or provider operation is exposed to the browser.
+### Owner dashboard setup
+
+1. Apply all migrations with `supabase db push`, including `20261112000000_owner_dashboard.sql`. The migration adds a low-inventory threshold without changing existing product data, makes category deletion restrictive, and adds owner-only RLS policies based on the trusted `app_metadata.is_owner` JWT claim.
+2. In the Supabase Dashboard, keep public sign-ups disabled. Create or invite the owner's account using the Supabase Auth user-management screen; there is no public registration page.
+3. Set that user's **app metadata** (not user metadata) to include `"is_owner": true`, and set the matching Auth user UUID as `OWNER_USER_ID` on the Render Web Service. The app metadata claim enables the owner-only RLS policies; the API additionally compares the authenticated user ID with `OWNER_USER_ID`. Sign out and sign in again after changing app metadata so the new claim is in the token.
+4. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` on the Render Static Site build environment. These are public client settings. Never expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
+5. Visit `/owner/login` on the customer domain. Sign in, then manage products, inventory, categories, homepage content, and read-only order details. Category archival is unpublishing; a category with linked products cannot be deleted. No owner screen can mark a payment as paid.
+
+The server-side owner middleware verifies each bearer token with Supabase Auth and compares its user ID to `OWNER_USER_ID` before admin routes execute. The service-role key bypasses RLS, so this server-side authorization remains mandatory even with owner policies in place.
 
 ## Render deployment
 
@@ -96,19 +106,20 @@ Create two Render services from this GitHub repository; do not point the custome
 - Build command: `npm ci && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/client`
 - Publish directory: `client/dist`
 - Build environment: `VITE_API_BASE_URL=https://api.yourdomain.com`
+- Build environment: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the Supabase project
 - Add the custom customer domain to this Static Site and configure its DNS as Render instructs.
 - Add an SPA rewrite from `/*` to `/index.html` with status `200`.
 
 **Web Service (API subdomain)**
 
 - Root directory: repository root
-- Build command: `npm ci && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/server`
+- Build command: `npm ci --include=dev && npm run build --workspace @sweet-juniper/shared && npm run build --workspace @sweet-juniper/server`
 - Start command: `npm run start --workspace @sweet-juniper/server`
 - Set `NODE_ENV=production`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_USER_ID`, and `CLIENT_ORIGIN=https://yourdomain.com`.
 - Add `api.yourdomain.com` as a custom domain to this Web Service and configure its DNS as Render instructs. Render terminates HTTPS for both services.
 
-The two services deploy independently from the same GitHub repository. The frontend boot animation remains usable while the Web Service starts; the client hides startup/network errors and only shows a friendly retry message.
+The two services deploy independently from the same GitHub repository. The frontend boot animation remains usable while the Web Service starts; the client hides startup/network errors and only shows a friendly retry message. After applying a database migration, redeploy the API only if its code changed; no Render rebuild is required for product, category, inventory, or homepage-content changes.
 
 ## Scope and next steps
 
-The customer homepage, published catalog, product detail pages, and in-memory cart are implemented. Product administration, owner sign-in UI, inventory workflows, cart/order processing, PayPal, Cloudinary uploads, and Resend delivery remain future work. Before production, supply licensed quilt/kinusaiga photos and business contact/policy text, configure the Supabase and Render projects, deploy each service, and verify the HTTPS API origin/CORS settings. The existing initial migration is already applied to the linked Supabase project; this phase adds no database migration.
+The customer homepage, published catalog, product detail pages, and in-memory cart are implemented, as are owner sign-in, product/category administration, low-inventory alerts, homepage content management, and read-only orders. Secure media uploads, order fulfillment actions, customer checkout, PayPal, and Resend delivery remain future work. Before production, configure and protect the Supabase owner account, apply the new migration, supply licensed quilt/kinusaiga photos and business contact/policy text, and verify the HTTPS API origin/CORS settings.

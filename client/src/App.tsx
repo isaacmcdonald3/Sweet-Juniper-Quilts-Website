@@ -116,7 +116,7 @@ function App() {
   return (
     <>
       {view === "transitioning" && storefront && (
-        <div className="storefront-underlay" aria-hidden="true">
+        <div className="storefront-underlay" aria-hidden="true" inert>
           <BrowserRouter>
             <StorefrontApplication data={storefront} />
           </BrowserRouter>

@@ -1,7 +1,11 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NextFunction, Request, Response } from "express";
 
-export function requireOwner(supabase: SupabaseClient, ownerUserId?: string) {
+type GetUserId = (token: string) => Promise<string | null>;
+
+export function requireOwner(
+  getUserId: GetUserId,
+  ownerUserId?: string,
+) {
   return async (request: Request, response: Response, next: NextFunction) => {
     if (!ownerUserId) {
       response.status(503).json({ error: "Owner access is not configured." });
@@ -16,15 +20,16 @@ export function requireOwner(supabase: SupabaseClient, ownerUserId?: string) {
     }
 
     try {
-      const { data, error } = await supabase.auth.getUser(token);
-      if (error || !data.user) {
+      const authenticatedUserId = await getUserId(token);
+      if (!authenticatedUserId) {
         response.status(401).json({ error: "Authentication is required." });
         return;
       }
-      if (data.user.id !== ownerUserId) {
+      if (authenticatedUserId !== ownerUserId) {
         response.status(403).json({ error: "Owner access is required." });
         return;
       }
+      response.locals.ownerUserId = authenticatedUserId;
       next();
     } catch (error) {
       next(error);

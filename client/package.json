@@ -10,6 +10,7 @@
     "test": "tsx --test src/hooks/cart-state.test.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
     "@sweet-juniper/shared": "1.0.0",
     "@vitejs/plugin-react": "^4.4.1",
     "react": "^19.0.0",

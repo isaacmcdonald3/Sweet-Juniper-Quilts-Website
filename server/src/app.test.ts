@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import pino from "pino";
 import request from "supertest";
+import { createClient } from "@supabase/supabase-js";
 import type {
   CatalogCategory,
   CatalogProduct,
@@ -11,6 +12,7 @@ import type {
 } from "@sweet-juniper/shared";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { createAdminService } from "./services/admin-service.js";
 
 const bootstrap: StorefrontBootstrap = {
   shopName: "Sweet Juniper Quilts",
@@ -59,6 +61,13 @@ const app = createApp({
           media: [],
         }
       : null,
+  ownerUserId: "owner-id",
+  getAuthenticatedUserId: async (token) => {
+    if (token === "owner-token") return "owner-id";
+    if (token === "customer-token") return "customer-id";
+    return null;
+  },
+  admin: createAdminService(createClient("https://project.supabase.co", "test-anon-key")),
 });
 test("health stays available independently of database readiness", async () => {
   databaseReady = false;
@@ -110,6 +119,30 @@ test("CORS only grants the configured customer origin", async () => {
     .expect(200);
   const response = await request(app).get("/api/health").set("Origin", "https://other.example").expect(200);
   assert.equal(response.headers["access-control-allow-origin"], undefined);
+});
+
+test("administrative requests require the configured owner identity", async () => {
+  await request(app).get("/api/admin/products").expect(401);
+  await request(app)
+    .get("/api/admin/products")
+    .set("Authorization", "Bearer customer-token")
+    .expect(403);
+  await request(app)
+    .post("/api/admin/products")
+    .set("Authorization", "Bearer owner-token")
+    .send({ name: "" })
+    .expect(400, { error: "Product details are invalid." });
+});
+
+test("owner API preflight permits authenticated administrative methods", async () => {
+  const response = await request(app)
+    .options("/api/admin/products/product-id")
+    .set("Origin", "https://shop.example")
+    .set("Access-Control-Request-Method", "PATCH")
+    .set("Access-Control-Request-Headers", "authorization,content-type")
+    .expect(204);
+  assert.match(response.headers["access-control-allow-headers"], /authorization/i);
+  assert.match(response.headers["access-control-allow-methods"], /patch/i);
 });
 
 test("configuration accepts a blank optional owner ID and uses Render's port", () => {
