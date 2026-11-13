@@ -115,6 +115,28 @@ export interface AdminOrderSummary {
   createdAt: string;
 }
 
+export interface AdminEmailLog {
+  id: string;
+  recipient: string | null;
+  recipientRole: "customer" | "owner";
+  templateKey: string;
+  status: "queued" | "sending" | "sent" | "delivered" | "failed" | "bounced" | "complained";
+  relatedOrderId: string | null;
+  orderNumber: number | null;
+  providerMessageId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attemptCount: number;
+  cycleAttemptCount: number;
+  manualRetryCount: number;
+  maxAttempts: number;
+  nextAttemptAt: string | null;
+  lastAttemptAt: string | null;
+  sentAt: string | null;
+  errorDetails: string | null;
+  retryable: boolean;
+}
+
 export interface AdminOrder extends AdminOrderSummary {
   shippingAddress: Record<string, unknown>;
   shippingCarrier: string | null;

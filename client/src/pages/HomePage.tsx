@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { CatalogProductMedia, StorefrontHomepage } from "@sweet-juniper/shared";
 import { ProductCard } from "../components/ProductCard";
+import { requestApi } from "../services/storefront-api";
 import { getContentSection, getContentText } from "../utils/homepage-content";
 
 const defaultSectionOrder = ["categories", "featured", "about", "promotion", "contact"];
@@ -22,6 +23,9 @@ function mediaById(data: StorefrontHomepage, id: string): CatalogProductMedia | 
 }
 
 export function HomePage({ data }: { data: StorefrontHomepage }) {
+  const contactRequestKey = useRef<string | null>(null);
+  const [contactStatus, setContactStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [contactMessage, setContactMessage] = useState("");
   const home = getContentSection(data.content, "home");
   const welcome = getContentSection(data.content, "welcome");
   const about = getContentSection(data.content, "about");
@@ -79,6 +83,37 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
   const promotionBody = getContentText(promotion, "body", "");
   const promotionUrl = safePromotionUrl(getContentText(promotion, "buttonUrl", "/catalog"));
   const promotionHasContent = Boolean(promotionTitle || promotionBody);
+
+  async function submitContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    setContactStatus("sending");
+    setContactMessage("");
+    try {
+      const response = await requestApi("/api/contact", undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey: contactRequestKey.current || (contactRequestKey.current = crypto.randomUUID()),
+          name: String(values.get("name") || ""),
+          email: String(values.get("email") || ""),
+          message: String(values.get("message") || ""),
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || "Your message could not be sent. Please try again.");
+      }
+      form.reset();
+      contactRequestKey.current = null;
+      setContactStatus("sent");
+      setContactMessage("Thank you for reaching out. Your message has been received.");
+    } catch (error) {
+      setContactStatus("error");
+      setContactMessage(error instanceof Error ? error.message : "Your message could not be sent. Please try again.");
+    }
+  }
 
   const sections: Record<string, ReactNode> = {
     categories: (
@@ -164,8 +199,17 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
         {contactEmail ? (
           <a className="button button--outline" href={`mailto:${contactEmail}`}>{contactEmail}</a>
         ) : (
-          <p>Studio contact details are being prepared. Please visit again soon.</p>
+          <p>Have a question about a piece or a custom craft? Send a note to the studio.</p>
         )}
+        <form className="home-contact__form" onChange={() => { contactRequestKey.current = null; }} onSubmit={(event) => void submitContact(event)}>
+          <label><span>Your name</span><input autoComplete="name" maxLength={120} name="name" required /></label>
+          <label><span>Email address</span><input autoComplete="email" maxLength={254} name="email" required type="email" /></label>
+          <label className="home-contact__wide"><span>Your message</span><textarea maxLength={3000} name="message" required rows={5} /></label>
+          <button className="button button--primary home-contact__wide" disabled={contactStatus === "sending"} type="submit">
+            {contactStatus === "sending" ? "Sending…" : "Send message"}
+          </button>
+          {contactMessage && <p className={contactStatus === "error" ? "owner-error home-contact__wide" : "owner-success home-contact__wide"} role={contactStatus === "error" ? "alert" : "status"}>{contactMessage}</p>}
+        </form>
         <div className="home-contact__policies">
           <Link to="/policies/shipping-returns">Shipping &amp; returns</Link>
           <Link to="/policies/privacy">Privacy policy</Link>

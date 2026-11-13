@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { test } from "node:test";
 import pino from "pino";
 import request from "supertest";
@@ -19,6 +20,9 @@ import {
 } from "./services/cloudinary-service.js";
 import { createMediaService } from "./services/media-service.js";
 import { createCheckoutService } from "./services/checkout-service.js";
+import { createEmailService } from "./services/email-service.js";
+import { renderEmail } from "./services/email-templates.js";
+import { verifyResendWebhookSignature } from "./services/resend-webhook.js";
 
 const bootstrap: StorefrontBootstrap = {
   shopName: "Sweet Juniper Quilts",
@@ -78,6 +82,11 @@ const app = createApp({
   media: createMediaService(
     createClient("https://project.supabase.co", "test-anon-key"),
     createCloudinaryService(undefined, pino({ enabled: false })),
+    pino({ enabled: false }),
+  ),
+  emails: createEmailService(
+    createClient("https://project.supabase.co", "test-anon-key"),
+    {},
     pino({ enabled: false }),
   ),
 });
@@ -146,6 +155,14 @@ test("administrative requests require the configured owner identity", async () =
     .expect(400, { error: "Product details are invalid." });
 });
 
+test("contact form validates submissions and email logs remain owner-only", async () => {
+  await request(app)
+    .post("/api/contact")
+    .send({ name: "Quilter", email: "not-an-email", message: "" })
+    .expect(400, { error: "Enter your name, a valid email address, and a message of up to 3,000 characters." });
+  await request(app).get("/api/admin/email-logs").expect(401);
+});
+
 test("media endpoints are owner-only and report when Cloudinary is not configured", async () => {
   await request(app).get("/api/admin/media/limits").expect(401);
   await request(app)
@@ -201,6 +218,62 @@ test("configuration accepts a blank optional owner ID and uses Render's port", (
   assert.equal(config.paypal.mode, "sandbox");
   assert.equal(config.paypal.livePaymentsEnabled, false);
   assert.equal(config.paypal.shippingAmount, 8);
+});
+
+test("Resend configuration is all-or-none for sending", () => {
+  assert.throws(() => loadConfig({
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "test-key",
+    RESEND_API_KEY: "re_test",
+  }), /RESEND_API_KEY/);
+  const config = loadConfig({
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "test-key",
+    RESEND_API_KEY: "re_test",
+    EMAIL_FROM: "orders@verified.example",
+    OWNER_NOTIFICATION_EMAIL: "owner@example.com",
+    APPLICATION_BASE_URL: "https://shop.example",
+  });
+  assert.equal(config.email.from, "orders@verified.example");
+});
+
+test("Resend webhook signatures reject modified or stale requests", () => {
+  const secretBytes = Buffer.from("test signing key");
+  const secret = `whsec_${secretBytes.toString("base64")}`;
+  const rawBody = Buffer.from('{"type":"email.delivered"}');
+  const id = "evt_123";
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac("sha256", secretBytes)
+    .update(`${id}.${timestamp}.`)
+    .update(rawBody)
+    .digest("base64");
+  const headers = { id, timestamp, signature: `v1,${signature}` };
+  assert.equal(verifyResendWebhookSignature(secret, headers, rawBody), true);
+  assert.equal(verifyResendWebhookSignature(secret, headers, Buffer.from("{}")), false);
+  assert.equal(verifyResendWebhookSignature(secret, { ...headers, timestamp: "1" }, rawBody), false);
+});
+
+test("transactional templates escape user content and keep owner mail minimal", () => {
+  const order = {
+    orderNumber: 104,
+    customerName: "<script>alert(1)</script>",
+    customerEmail: "buyer@example.com",
+    shippingAddress: { addressLine1: "123 Main St", city: "Portland", region: "OR", postalCode: "97201" },
+    subtotal: 35,
+    shippingAmount: 8,
+    totalAmount: 43,
+    currency: "USD",
+    shippingCarrier: "USPS",
+    trackingNumber: "12345",
+    items: [{ name: "<Quilt>", sku: "Q-1", quantity: 1, unitPrice: 35, lineTotal: 35 }],
+  };
+  const shipping = renderEmail("customer_shipping_confirmation", order, null, "https://shop.example");
+  assert.match(shipping.html, /&lt;script&gt;/);
+  assert.match(shipping.html, /Track package/);
+  assert.match(shipping.text, /Tracking number: 12345/);
+  const owner = renderEmail("owner_new_paid_order", order, null, "https://shop.example");
+  assert.match(owner.html, /Q-1/);
+  assert.doesNotMatch(owner.html, /123 Main St/);
 });
 
 test("PayPal checkout requires a webhook and keeps Live mode explicitly gated", () => {

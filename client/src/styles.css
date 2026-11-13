@@ -803,6 +803,56 @@ a {
   text-align: center;
 }
 
+.home-contact__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 760px;
+  margin: 34px auto 0;
+  text-align: left;
+}
+
+.home-contact__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #5d6457;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.home-contact__form input,
+.home-contact__form textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 13px;
+  border: 1px solid #d7cebf;
+  border-radius: 2px;
+  color: #293d32;
+  background: #fffdf8;
+  font: inherit;
+}
+
+.home-contact__form textarea {
+  resize: vertical;
+}
+
+.home-contact__form input:focus,
+.home-contact__form textarea:focus,
+.email-log-filters select:focus {
+  outline: 3px solid #b88966;
+  outline-offset: 2px;
+}
+
+.home-contact__wide {
+  grid-column: 1 / -1;
+}
+
+.home-contact__form .button {
+  justify-self: center;
+  min-width: 180px;
+}
+
 .home-contact > p:not(.eyebrow) {
   color: #726d61;
 }
@@ -1777,6 +1827,49 @@ a {
   margin: -10px 0 22px;
 }
 
+.email-log-filters {
+  display: flex;
+  justify-content: flex-end;
+  margin: 20px 0;
+}
+
+.email-log-filters label {
+  display: flex;
+  min-width: 210px;
+  flex-direction: column;
+  gap: 7px;
+  color: #5d6457;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.email-log-filters select {
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid #d7cebf;
+  border-radius: 2px;
+  color: #293d32;
+  background: #fffdf8;
+  font: inherit;
+}
+
+.email-log-table td small {
+  display: block;
+  margin-top: 5px;
+}
+
+.email-log-details {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+
+.email-log-details .button {
+  min-height: 37px;
+  margin-top: 6px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+}
+
 .owner-empty-card {
   padding: 35px 24px;
   color: #777367;
@@ -2396,13 +2489,19 @@ a {
 @media (max-width: 650px) {
   .checkout-form,
   .owner-order-filters,
-  .owner-order-fulfillment {
+  .owner-order-fulfillment,
+  .home-contact__form {
     grid-template-columns: 1fr;
   }
 
   .checkout-form__wide,
-  .owner-order-fulfillment .button {
+  .owner-order-fulfillment .button,
+  .home-contact__wide {
     grid-column: auto;
+  }
+
+  .home-contact__form .home-contact__wide {
+    grid-column: 1;
   }
 
   .checkout-form,

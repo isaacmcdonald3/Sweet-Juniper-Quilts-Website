@@ -23,6 +23,7 @@ import {
 } from "./services/media-service.js";
 import { requireOwner } from "./middleware/require-owner.js";
 import { CheckoutError, type CheckoutService } from "./services/checkout-service.js";
+import { type EmailService } from "./services/email-service.js";
 
 const productFiltersSchema = z.object({
   category: z.string().uuid().optional(),
@@ -76,6 +77,15 @@ const mediaUpdateSchema = z
   })
   .refine((value) => Object.keys(value).length > 0);
 
+const contactSubmissionSchema = z.object({
+  idempotencyKey: z.string().uuid(),
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254),
+  message: z.string().trim().min(1).max(3000),
+});
+
+const emailLogStatuses = ["queued", "sending", "sent", "delivered", "failed", "bounced", "complained"] as const;
+
 function getOwnerId(response: Response): string {
   const ownerId: unknown = response.locals.ownerUserId;
   if (typeof ownerId !== "string") throw new Error("Owner identity is missing from the request context.");
@@ -96,6 +106,7 @@ export interface AppServices {
   admin: ReturnType<typeof createAdminService>;
   media: ReturnType<typeof createMediaService>;
   checkout?: CheckoutService;
+  emails?: EmailService;
 }
 
 export function createApp(services: AppServices) {
@@ -134,6 +145,63 @@ export function createApp(services: AppServices) {
         return;
       }
       await services.checkout.handleWebhook(event);
+      response.status(200).json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/resend/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (request, response, next) => {
+    if (!services.emails?.isWebhookConfigured() || !Buffer.isBuffer(request.body)) {
+      response.status(503).json({ error: "Resend webhooks are not configured." });
+      return;
+    }
+    const rawBody = request.body as Buffer;
+    const headers = {
+      id: request.header("svix-id"),
+      timestamp: request.header("svix-timestamp"),
+      signature: request.header("svix-signature"),
+    };
+    if (!services.emails.verifyWebhook(headers, rawBody)) {
+      response.status(400).json({ error: "Resend webhook signature could not be verified." });
+      return;
+    }
+
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(rawBody.toString("utf8")) as Record<string, unknown>;
+    } catch {
+      response.status(400).json({ error: "Resend webhook event is invalid." });
+      return;
+    }
+    const eventId = headers.id || (typeof event.id === "string" ? event.id : "");
+    const eventType = event.type;
+    const eventData = event.data as Record<string, unknown> | undefined;
+    if (
+      typeof eventType !== "string" ||
+      !["email.delivered", "email.bounced", "email.complained", "email.failed"].includes(eventType)
+    ) {
+      response.status(200).json({ received: true });
+      return;
+    }
+    if (!eventId || typeof eventData?.email_id !== "string") {
+      response.status(400).json({ error: "Resend webhook event details are invalid." });
+      return;
+    }
+    const bounceData = eventData.bounce as Record<string, unknown> | undefined;
+    const failureData = eventData.failure as Record<string, unknown> | undefined;
+    const providerReason = [
+      eventData.reason,
+      bounceData?.reason,
+      bounceData?.message,
+      failureData?.reason,
+      failureData?.message,
+    ].find((value): value is string => typeof value === "string");
+    try {
+      await services.emails.handleWebhook(eventId, {
+        type: eventType,
+        data: { email_id: eventData.email_id },
+        errorDetails: providerReason?.slice(0, 1000),
+      });
       response.status(200).json({ received: true });
     } catch (error) {
       next(error);
@@ -232,6 +300,29 @@ export function createApp(services: AppServices) {
 
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok" });
+  });
+
+  app.post("/api/contact", async (request, response, next) => {
+    if (!services.emails) {
+      response.status(503).json({ error: "The contact form is not available right now." });
+      return;
+    }
+    const parsed = contactSubmissionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Enter your name, a valid email address, and a message of up to 3,000 characters." });
+      return;
+    }
+    try {
+      await services.emails.createContactSubmission({
+        idempotencyKey: parsed.data.idempotencyKey,
+        name: parsed.data.name,
+        email: parsed.data.email,
+        message: parsed.data.message,
+      });
+      response.status(202).json({ accepted: true });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/ready", async (_request, response, next) => {
@@ -601,6 +692,47 @@ export function createApp(services: AppServices) {
     }
   });
 
+  admin.get("/email-logs", async (request, response, next) => {
+    if (!services.emails) {
+      response.status(503).json({ error: "Email delivery is not configured." });
+      return;
+    }
+    const parsedStatus = z.enum(emailLogStatuses).or(z.literal("all")).safeParse(request.query.status || "all");
+    if (!parsedStatus.success) {
+      response.status(400).json({ error: "Email log filter is invalid." });
+      return;
+    }
+    try {
+      response.json(await services.emails.listLogs(parsedStatus.data));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post("/email-logs/:id/retry", async (request, response, next) => {
+    if (!services.emails) {
+      response.status(503).json({ error: "Email delivery is not configured." });
+      return;
+    }
+    const parsedId = z.string().uuid().safeParse(request.params.id);
+    if (!parsedId.success) {
+      response.status(400).json({ error: "Email log address is invalid." });
+      return;
+    }
+    try {
+      if (!(await services.emails.retryLog(parsedId.data))) {
+        response.status(409).json({ error: "This email is not eligible for retry." });
+        return;
+      }
+      response.status(202).json({ queued: true });
+      void services.emails.processQueue().catch((error: unknown) => {
+        services.logger.error({ err: error }, "Queued email retries could not be processed");
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   admin.get("/orders/:id", async (request, response, next) => {
     const parsedId = z.string().uuid().safeParse(request.params.id);
     if (!parsedId.success) {
@@ -737,6 +869,11 @@ export function createApp(services: AppServices) {
     }
     if (error instanceof CheckoutError) {
       response.status(error.status).json({ error: error.message });
+      return;
+    }
+    if (typeof error === "object" && error !== null && "message" in error &&
+      typeof error.message === "string" && error.message.includes("CONTACT_RATE_LIMIT")) {
+      response.status(429).json({ error: "Please wait before sending another message from this email address." });
       return;
     }
     if (error instanceof multer.MulterError) {

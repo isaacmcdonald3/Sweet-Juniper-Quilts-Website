@@ -7,6 +7,7 @@ import { createAdminService } from "./services/admin-service.js";
 import { createCloudinaryService } from "./services/cloudinary-service.js";
 import { createMediaService } from "./services/media-service.js";
 import { createCheckoutService } from "./services/checkout-service.js";
+import { createEmailService } from "./services/email-service.js";
 import { logger } from "./logger.js";
 
 const config = loadConfig();
@@ -33,6 +34,7 @@ const checkout = createCheckoutService(supabase, {
   shippingAmount: config.paypal.shippingAmount,
   clientOrigin: config.allowedOrigins[0] || "http://localhost:5173",
 });
+const emails = createEmailService(supabase, config.email, logger);
 const app = createApp({
   allowedOrigins: config.allowedOrigins,
   logger,
@@ -50,6 +52,7 @@ const app = createApp({
   admin,
   media,
   checkout,
+  emails,
 });
 
 const reservationCleanup = setInterval(() => {
@@ -60,6 +63,16 @@ const reservationCleanup = setInterval(() => {
 reservationCleanup.unref();
 void checkout.expireReservations().catch((error: unknown) => {
   logger.error({ err: error }, "Expired checkout reservations could not be released at startup");
+});
+
+const emailWorker = setInterval(() => {
+  void emails.processQueue().catch((error: unknown) => {
+    logger.error({ err: error }, "Queued emails could not be processed");
+  });
+}, 15_000);
+emailWorker.unref();
+void emails.processQueue().catch((error: unknown) => {
+  logger.error({ err: error }, "Queued emails could not be processed at startup");
 });
 
 app.listen(config.SERVER_PORT, () => {

@@ -365,18 +365,19 @@ export function createAdminService(supabase: SupabaseClient) {
     if (current.status === "refunded" || current.status === "cancelled") {
       throw new AdminConflictError("A refunded or cancelled order cannot be fulfilled.");
     }
-    const timestamp = new Date().toISOString();
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        fulfillment_status: input.fulfillmentStatus,
-        shipping_carrier: input.shippingCarrier,
-        tracking_number: input.trackingNumber,
-        ...(input.fulfillmentStatus === "shipped" ? { shipped_at: timestamp } : {}),
-        ...(input.fulfillmentStatus === "fulfilled" ? { fulfilled_at: timestamp } : {}),
-      })
-      .eq("id", id);
-    if (error) throw error;
+    const { data: updated, error } = await supabase.rpc("update_order_fulfillment_and_enqueue", {
+      p_order_id: id,
+      p_fulfillment_status: input.fulfillmentStatus,
+      p_shipping_carrier: input.shippingCarrier,
+      p_tracking_number: input.trackingNumber,
+    });
+    if (error) {
+      if (error.message.includes("ORDER_NOT_FULFILLABLE")) {
+        throw new AdminConflictError("A refunded or cancelled order cannot be fulfilled.");
+      }
+      throw error;
+    }
+    if (!updated) return null;
     await audit(actorId, "order.fulfillment_updated", "order", id);
     return getOrder(id);
   }
