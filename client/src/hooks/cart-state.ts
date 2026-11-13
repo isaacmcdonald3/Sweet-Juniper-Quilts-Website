@@ -8,7 +8,8 @@ export interface CartItem {
 export type CartAction =
   | { type: "add"; product: CatalogProduct; quantity: number }
   | { type: "remove"; productId: string }
-  | { type: "set-quantity"; productId: string; quantity: number };
+  | { type: "set-quantity"; productId: string; quantity: number }
+  | { type: "clear" };
 
 export function maximumQuantity(product: CatalogProduct): number {
   return product.fulfillmentType === "ready_to_ship"
@@ -17,6 +18,7 @@ export function maximumQuantity(product: CatalogProduct): number {
 }
 
 export function cartReducer(items: CartItem[], action: CartAction): CartItem[] {
+  if (action.type === "clear") return [];
   if (action.type === "remove") {
     return items.filter(({ product }) => product.id !== action.productId);
   }

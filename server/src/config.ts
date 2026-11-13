@@ -21,6 +21,12 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: optionalSecret,
   CLOUDINARY_IMAGE_MAX_BYTES: z.coerce.number().int().min(1).max(100_000_000).default(15_000_000),
   CLOUDINARY_VIDEO_MAX_BYTES: z.coerce.number().int().min(1).max(90_000_000).default(90_000_000),
+  PAYPAL_CLIENT_ID: optionalSecret,
+  PAYPAL_CLIENT_SECRET: optionalSecret,
+  PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
+  PAYPAL_LIVE_PAYMENTS_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  PAYPAL_WEBHOOK_ID: optionalSecret,
+  CHECKOUT_SHIPPING_AMOUNT: z.coerce.number().min(0).max(100_000).default(8),
 }).superRefine((config, context) => {
   const credentials = [
     config.CLOUDINARY_CLOUD_NAME,
@@ -32,6 +38,20 @@ const envSchema = z.object({
       code: "custom",
       message: "Cloudinary cloud name, API key, and API secret must be configured together.",
       path: ["CLOUDINARY_API_SECRET"],
+    });
+  }
+  if (Boolean(config.PAYPAL_CLIENT_ID) !== Boolean(config.PAYPAL_CLIENT_SECRET)) {
+    context.addIssue({
+      code: "custom",
+      message: "PayPal client ID and client secret must be configured together.",
+      path: ["PAYPAL_CLIENT_SECRET"],
+    });
+  }
+  if (Math.round(config.CHECKOUT_SHIPPING_AMOUNT * 100) !== config.CHECKOUT_SHIPPING_AMOUNT * 100) {
+    context.addIssue({
+      code: "custom",
+      message: "Checkout shipping amount must be in whole cents.",
+      path: ["CHECKOUT_SHIPPING_AMOUNT"],
     });
   }
 });
@@ -59,5 +79,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     SERVER_PORT: result.data.PORT || result.data.SERVER_PORT,
     allowedOrigins: result.data.CLIENT_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean),
     cloudinary,
+    paypal: {
+      clientId: result.data.PAYPAL_CLIENT_ID,
+      clientSecret: result.data.PAYPAL_CLIENT_SECRET,
+      mode: result.data.PAYPAL_MODE,
+      livePaymentsEnabled: result.data.PAYPAL_LIVE_PAYMENTS_ENABLED,
+      webhookId: result.data.PAYPAL_WEBHOOK_ID,
+      shippingAmount: result.data.CHECKOUT_SHIPPING_AMOUNT,
+    },
   };
 }

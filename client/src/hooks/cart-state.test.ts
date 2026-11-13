@@ -33,3 +33,8 @@ test("cart quantities update and items can be removed", () => {
   assert.equal(cartSubtotal(changed), 250);
   assert.deepEqual(cartReducer(changed, { type: "remove", productId: product.id }), []);
 });
+
+test("a completed checkout clears all cart items", () => {
+  const items = cartReducer([], { type: "add", product, quantity: 1 });
+  assert.deepEqual(cartReducer(items, { type: "clear" }), []);
+});

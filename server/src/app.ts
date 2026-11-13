@@ -22,6 +22,7 @@ import {
   createMediaService,
 } from "./services/media-service.js";
 import { requireOwner } from "./middleware/require-owner.js";
+import { CheckoutError, type CheckoutService } from "./services/checkout-service.js";
 
 const productFiltersSchema = z.object({
   category: z.string().uuid().optional(),
@@ -94,6 +95,7 @@ export interface AppServices {
   ownerUserId?: string;
   admin: ReturnType<typeof createAdminService>;
   media: ReturnType<typeof createMediaService>;
+  checkout?: CheckoutService;
 }
 
 export function createApp(services: AppServices) {
@@ -107,7 +109,126 @@ export function createApp(services: AppServices) {
       allowedHeaders: ["Content-Type", "Authorization"],
     }),
   );
+  app.post("/api/paypal/webhook", express.raw({ type: "application/json", limit: "1mb" }), async (request, response, next) => {
+    if (!services.checkout || !Buffer.isBuffer(request.body)) {
+      response.status(503).json({ error: "PayPal webhooks are not configured." });
+      return;
+    }
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(request.body.toString("utf8")) as Record<string, unknown>;
+    } catch {
+      response.status(400).json({ error: "PayPal webhook event is invalid." });
+      return;
+    }
+    const headers = {
+      "paypal-auth-algo": request.header("paypal-auth-algo"),
+      "paypal-cert-url": request.header("paypal-cert-url"),
+      "paypal-transmission-id": request.header("paypal-transmission-id"),
+      "paypal-transmission-sig": request.header("paypal-transmission-sig"),
+      "paypal-transmission-time": request.header("paypal-transmission-time"),
+    };
+    try {
+      if (!(await services.checkout.verifyWebhook(headers, event))) {
+        response.status(400).json({ error: "PayPal webhook signature could not be verified." });
+        return;
+      }
+      await services.checkout.handleWebhook(event);
+      response.status(200).json({ received: true });
+    } catch (error) {
+      next(error);
+    }
+  });
   app.use(express.json({ limit: "1mb" }));
+
+  const checkoutItemsSchema = z.array(z.object({
+    productId: z.string().uuid(),
+    quantity: z.number().int().min(1).max(99),
+  })).min(1).max(30).superRefine((items, context) => {
+    if (new Set(items.map((item) => item.productId)).size !== items.length) {
+      context.addIssue({ code: "custom", message: "Duplicate products are not allowed." });
+    }
+  });
+  const checkoutOrderSchema = z.object({
+    idempotencyKey: z.string().uuid(),
+    customer: z.object({
+      name: z.string().trim().min(1).max(120),
+      email: z.string().trim().email().max(254),
+      address: z.object({
+        addressLine1: z.string().trim().min(1).max(150),
+        addressLine2: z.string().trim().max(150),
+        city: z.string().trim().min(1).max(100),
+        region: z.string().trim().min(1).max(100),
+        postalCode: z.string().trim().min(1).max(24),
+        country: z.string().trim().regex(/^[A-Za-z]{2}$/).transform((value) => value.toUpperCase()),
+      }),
+    }),
+    items: checkoutItemsSchema,
+  });
+  const checkoutRefSchema = z.object({
+    reservationId: z.string().uuid(),
+    paypalOrderId: z.string().min(1).max(128),
+  });
+  app.get("/api/checkout/config", (_request, response) => {
+    if (!services.checkout) {
+      response.status(503).json({ error: "Checkout is not configured." });
+      return;
+    }
+    response.json(services.checkout.getPublicConfig());
+  });
+  app.post("/api/checkout/orders", async (request, response, next) => {
+    if (!services.checkout) {
+      response.status(503).json({ error: "Checkout is not configured." });
+      return;
+    }
+    const parsed = checkoutOrderSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Enter valid contact and shipping details, then review your cart." });
+      return;
+    }
+    try {
+      response.status(201).json(await services.checkout.createOrder(
+        parsed.data.idempotencyKey,
+        parsed.data.customer,
+        parsed.data.items,
+      ));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/checkout/capture", async (request, response, next) => {
+    if (!services.checkout) {
+      response.status(503).json({ error: "Checkout is not configured." });
+      return;
+    }
+    const parsed = checkoutRefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Payment confirmation details are invalid." });
+      return;
+    }
+    try {
+      response.json(await services.checkout.captureOrder(parsed.data.reservationId, parsed.data.paypalOrderId));
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/checkout/cancel", async (request, response, next) => {
+    if (!services.checkout) {
+      response.status(503).json({ error: "Checkout is not configured." });
+      return;
+    }
+    const parsed = checkoutRefSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Checkout session details are invalid." });
+      return;
+    }
+    try {
+      await services.checkout.cancelOrder(parsed.data.reservationId, parsed.data.paypalOrderId);
+      response.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok" });
@@ -498,6 +619,56 @@ export function createApp(services: AppServices) {
     }
   });
 
+  admin.patch("/orders/:id/fulfillment", async (request, response, next) => {
+    const parsedId = z.string().uuid().safeParse(request.params.id);
+    const parsed = z.object({
+      fulfillmentStatus: z.enum(["processing", "shipped", "fulfilled", "returned"]),
+      shippingCarrier: z.string().trim().max(100).nullable(),
+      trackingNumber: z.string().trim().max(150).nullable(),
+    }).safeParse(request.body);
+    if (!parsedId.success || !parsed.success) {
+      response.status(400).json({ error: "Fulfillment details are invalid." });
+      return;
+    }
+    try {
+      const order = await services.admin.updateOrderFulfillment(
+        getOwnerId(response),
+        parsedId.data,
+        parsed.data,
+      );
+      if (!order) {
+        response.status(404).json({ error: "Order not found." });
+        return;
+      }
+      response.json(order);
+    } catch (error) {
+      next(error);
+    }
+  });
+  admin.post("/orders/:id/refund", async (request, response, next) => {
+    const parsedId = z.string().uuid().safeParse(request.params.id);
+    const parsed = z.object({ cancelled: z.boolean() }).safeParse(request.body);
+    if (!parsedId.success || !parsed.success) {
+      response.status(400).json({ error: "Refund details are invalid." });
+      return;
+    }
+    if (!services.checkout) {
+      response.status(503).json({ error: "PayPal is not configured." });
+      return;
+    }
+    try {
+      await services.checkout.refundOrder(parsedId.data, parsed.data.cancelled);
+      await services.admin.auditOrderAction(
+        getOwnerId(response),
+        parsed.data.cancelled ? "order.cancelled_refunded" : "order.refunded",
+        parsedId.data,
+      );
+      response.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   admin.get("/homepage-content", async (_request, response, next) => {
     try {
       response.json(await services.admin.listHomepageContent());
@@ -562,6 +733,10 @@ export function createApp(services: AppServices) {
     }
     if (error instanceof CloudinaryUnavailableError) {
       response.status(503).json({ error: error.message });
+      return;
+    }
+    if (error instanceof CheckoutError) {
+      response.status(error.status).json({ error: error.message });
       return;
     }
     if (error instanceof multer.MulterError) {

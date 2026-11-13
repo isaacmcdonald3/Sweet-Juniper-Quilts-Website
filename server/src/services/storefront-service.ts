@@ -123,6 +123,7 @@ export function createStorefrontService(
       .from("products")
       .select(productSelection)
       .eq("is_published", true)
+      .eq("fulfillment_type", "ready_to_ship")
       .is("archived_at", null)
       .order("created_at", { ascending: false })
       .limit(1000);
@@ -140,6 +141,7 @@ export function createStorefrontService(
       .select(productSelection)
       .eq("slug", slug)
       .eq("is_published", true)
+      .eq("fulfillment_type", "ready_to_ship")
       .is("archived_at", null)
       .maybeSingle();
     if (error) throw error;

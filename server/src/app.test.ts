@@ -18,6 +18,7 @@ import {
   UploadValidationError,
 } from "./services/cloudinary-service.js";
 import { createMediaService } from "./services/media-service.js";
+import { createCheckoutService } from "./services/checkout-service.js";
 
 const bootstrap: StorefrontBootstrap = {
   shopName: "Sweet Juniper Quilts",
@@ -197,6 +198,28 @@ test("configuration accepts a blank optional owner ID and uses Render's port", (
   assert.equal(config.OWNER_USER_ID, undefined);
   assert.equal(config.cloudinary, undefined);
   assert.deepEqual(config.allowedOrigins, ["https://shop.example", "https://www.shop.example"]);
+  assert.equal(config.paypal.mode, "sandbox");
+  assert.equal(config.paypal.livePaymentsEnabled, false);
+  assert.equal(config.paypal.shippingAmount, 8);
+});
+
+test("PayPal checkout requires a webhook and keeps Live mode explicitly gated", () => {
+  const supabase = createClient("https://project.supabase.co", "test-anon-key");
+  const sandboxConfig = {
+    paypalClientId: "sandbox-client",
+    paypalClientSecret: "sandbox-secret",
+    paypalMode: "sandbox" as const,
+    paypalLivePaymentsEnabled: false,
+    paypalWebhookId: "sandbox-webhook",
+    shippingAmount: 8,
+    clientOrigin: "https://shop.example",
+  };
+  assert.equal(createCheckoutService(supabase, sandboxConfig).getPublicConfig().configured, true);
+  assert.equal(createCheckoutService(supabase, { ...sandboxConfig, paypalWebhookId: undefined }).getPublicConfig().configured, false);
+  assert.equal(createCheckoutService(supabase, {
+    ...sandboxConfig,
+    paypalMode: "live",
+  }).getPublicConfig().configured, false);
 });
 
 test("Cloudinary credentials must be configured together", () => {

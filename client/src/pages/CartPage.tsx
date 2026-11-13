@@ -1,10 +1,25 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatPrice } from "../components/ProductCard";
 import { useCart } from "../hooks/cart-context";
 import { maximumQuantity } from "../hooks/cart-state";
+import { fetchApiJson } from "../services/storefront-api";
+
+interface CheckoutConfig {
+  shippingAmount: number;
+}
 
 export function CartPage() {
   const { items, subtotal, removeItem, setQuantity } = useCart();
+  const [shippingAmount, setShippingAmount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchApiJson<CheckoutConfig>("/api/checkout/config")
+      .then((config) => { if (active) setShippingAmount(config.shippingAmount); })
+      .catch(() => { if (active) setShippingAmount(null); });
+    return () => { active = false; };
+  }, []);
 
   return (
     <main className="page-main section-wrap cart-page">
@@ -45,7 +60,10 @@ export function CartPage() {
                       onChange={(event) => setQuantity(product.id, Number(event.target.value))}
                     />
                   </label>
-                  <strong className="cart-item__price">{formatPrice(product.price * quantity)}</strong>
+                  <div className="cart-item__price">
+                    <span>{formatPrice(product.price)} each</span>
+                    <strong>{formatPrice(product.price * quantity)}</strong>
+                  </div>
                 </article>
               );
             })}
@@ -53,8 +71,10 @@ export function CartPage() {
           <aside className="cart-summary">
             <h2>Order summary</h2>
             <div><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></div>
-            <p>Shipping and any applicable taxes will be confirmed before payment.</p>
-            <button className="button button--primary" disabled type="button">Checkout coming soon</button>
+            <div><span>Shipping</span><strong>{shippingAmount === null ? "Confirmed at checkout" : formatPrice(shippingAmount)}</strong></div>
+            {shippingAmount !== null && <div><span>Estimated total</span><strong>{formatPrice(subtotal + shippingAmount)}</strong></div>}
+            <p>Estimate only. Live prices and stock are checked on the server before you approve payment. Shipping is a flat rate per order.</p>
+            <Link className="button button--primary" to="/checkout">Continue to checkout</Link>
             <Link className="text-link" to="/catalog">Continue exploring</Link>
           </aside>
         </div>

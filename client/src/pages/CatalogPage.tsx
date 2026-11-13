@@ -66,6 +66,7 @@ export function CatalogPage({ data }: { data: StorefrontHomepage }) {
         <p className="eyebrow">THE SWEET JUNIPER COLLECTION</p>
         <h1>Made to be treasured.</h1>
         <p>Explore handmade quilts and one-of-a-kind fabric art from our studio.</p>
+        <p>Looking for a custom craft? Email <a href="mailto:sweetjuniperquilts@gmail.com">sweetjuniperquilts@gmail.com</a> to discuss your idea.</p>
       </section>
       <section className="catalog section-wrap" aria-label="Product catalog">
         <div className="catalog-controls">

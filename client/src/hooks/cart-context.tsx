@@ -9,6 +9,7 @@ interface CartContextValue {
   addItem: (product: CatalogProduct, quantity: number) => boolean;
   removeItem: (productId: string) => void;
   setQuantity: (productId: string, quantity: number) => void;
+  clear: () => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -34,6 +35,7 @@ export function CartProvider({ children }: PropsWithChildren) {
       return true;
     },
     removeItem: (productId) => dispatch({ type: "remove", productId }),
+    clear: () => dispatch({ type: "clear" }),
     setQuantity: (productId, quantity) => {
       if (!Number.isInteger(quantity) || quantity < 1) return;
       dispatch({ type: "set-quantity", productId, quantity });

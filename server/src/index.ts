@@ -6,6 +6,7 @@ import { createStorefrontService } from "./services/storefront-service.js";
 import { createAdminService } from "./services/admin-service.js";
 import { createCloudinaryService } from "./services/cloudinary-service.js";
 import { createMediaService } from "./services/media-service.js";
+import { createCheckoutService } from "./services/checkout-service.js";
 import { logger } from "./logger.js";
 
 const config = loadConfig();
@@ -23,6 +24,15 @@ const cloudinary = createCloudinaryService(config.cloudinary, logger, {
 const storefront = createStorefrontService(supabase, cloudinary);
 const admin = createAdminService(supabase);
 const media = createMediaService(supabase, cloudinary, logger);
+const checkout = createCheckoutService(supabase, {
+  paypalClientId: config.paypal.clientId,
+  paypalClientSecret: config.paypal.clientSecret,
+  paypalMode: config.paypal.mode,
+  paypalLivePaymentsEnabled: config.paypal.livePaymentsEnabled,
+  paypalWebhookId: config.paypal.webhookId,
+  shippingAmount: config.paypal.shippingAmount,
+  clientOrigin: config.allowedOrigins[0] || "http://localhost:5173",
+});
 const app = createApp({
   allowedOrigins: config.allowedOrigins,
   logger,
@@ -39,6 +49,17 @@ const app = createApp({
   },
   admin,
   media,
+  checkout,
+});
+
+const reservationCleanup = setInterval(() => {
+  void checkout.expireReservations().catch((error: unknown) => {
+    logger.error({ err: error }, "Expired checkout reservations could not be released");
+  });
+}, 60_000);
+reservationCleanup.unref();
+void checkout.expireReservations().catch((error: unknown) => {
+  logger.error({ err: error }, "Expired checkout reservations could not be released at startup");
 });
 
 app.listen(config.SERVER_PORT, () => {

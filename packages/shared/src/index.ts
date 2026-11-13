@@ -106,6 +106,7 @@ export interface AdminOrderSummary {
   id: string;
   orderNumber: number;
   status: string;
+  paymentStatus: string;
   customerName: string;
   customerEmail: string;
   totalAmount: number;
@@ -118,6 +119,10 @@ export interface AdminOrder extends AdminOrderSummary {
   shippingAddress: Record<string, unknown>;
   shippingCarrier: string | null;
   trackingNumber: string | null;
+  subtotal: number;
+  shippingAmount: number;
+  paypalOrderId: string | null;
+  paypalCaptureId: string | null;
   items: Array<{
     id: string;
     productName: string;
@@ -129,7 +134,10 @@ export interface AdminOrder extends AdminOrderSummary {
   payments: Array<{
     id: string;
     provider: string;
+    providerOrderId: string | null;
+    providerTransactionId: string | null;
     status: string;
+    refundStatus: string;
     amount: number;
     currency: string;
     createdAt: string;

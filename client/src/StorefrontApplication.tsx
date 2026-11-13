@@ -4,6 +4,7 @@ import type { StorefrontHomepage } from "@sweet-juniper/shared";
 import { SiteLayout } from "./components/SiteLayout";
 import { CartProvider } from "./hooks/cart-context";
 import { CartPage } from "./pages/CartPage";
+import { CheckoutPage } from "./pages/CheckoutPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { HomePage } from "./pages/HomePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -34,6 +35,7 @@ export function StorefrontApplication({ data }: { data: StorefrontHomepage }) {
           <Route path="/catalog" element={<CatalogPage data={data} />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/policies/shipping-returns" element={<PolicyPage data={data} policy="shipping" />} />
           <Route path="/policies/privacy" element={<PolicyPage data={data} policy="privacy" />} />
           <Route path="*" element={<NotFoundPage />} />

@@ -87,6 +87,7 @@ interface AdminOrderRow {
   id: string;
   order_number: number;
   status: string;
+  payments?: Array<{ status: string }>;
   customer_name: string;
   customer_email: string;
   total_amount: number | string;
@@ -96,9 +97,13 @@ interface AdminOrderRow {
 }
 
 interface AdminOrderDetailRow extends AdminOrderRow {
+  subtotal: number | string;
+  shipping_amount: number | string;
   shipping_address: Record<string, unknown>;
   shipping_carrier: string | null;
   tracking_number: string | null;
+  paypal_order_id: string | null;
+  paypal_capture_id: string | null;
   order_items: Array<{
     id: string;
     product_name_snapshot: string;
@@ -110,7 +115,10 @@ interface AdminOrderDetailRow extends AdminOrderRow {
   payments: Array<{
     id: string;
     provider: string;
+    provider_order_id: string | null;
+    provider_transaction_id: string | null;
     status: string;
+    refund_status: string;
     amount: number | string;
     currency: string;
     created_at: string;
@@ -191,6 +199,7 @@ function mapOrderSummary(row: AdminOrderRow): AdminOrderSummary {
     id: row.id,
     orderNumber: Number(row.order_number),
     status: row.status,
+    paymentStatus: row.payments?.[0]?.status || row.status,
     customerName: row.customer_name,
     customerEmail: row.customer_email,
     totalAmount: Number(row.total_amount),
@@ -266,7 +275,7 @@ export function createAdminService(supabase: SupabaseClient) {
       supabase.from("orders").select("id", { count: "exact", head: true }),
       supabase
         .from("orders")
-        .select("id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at")
+        .select("id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,payments(status)")
         .order("created_at", { ascending: false })
         .limit(10),
     ]);
@@ -278,7 +287,7 @@ export function createAdminService(supabase: SupabaseClient) {
   async function listOrders(): Promise<AdminOrderSummary[]> {
     const { data, error } = await supabase
       .from("orders")
-      .select("id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at")
+      .select("id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,payments(status)")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (error) throw error;
@@ -304,7 +313,7 @@ export function createAdminService(supabase: SupabaseClient) {
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,shipping_address,shipping_carrier,tracking_number,order_items(id,product_name_snapshot,product_sku_snapshot,quantity,unit_price,line_total),payments(id,provider,status,amount,currency,created_at)",
+        "id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,subtotal,shipping_amount,shipping_address,shipping_carrier,tracking_number,paypal_order_id,paypal_capture_id,order_items(id,product_name_snapshot,product_sku_snapshot,quantity,unit_price,line_total),payments(id,provider,provider_order_id,provider_transaction_id,status,refund_status,amount,currency,created_at)",
       )
       .eq("id", id)
       .maybeSingle();
@@ -316,6 +325,10 @@ export function createAdminService(supabase: SupabaseClient) {
       shippingAddress: data.shipping_address,
       shippingCarrier: data.shipping_carrier,
       trackingNumber: data.tracking_number,
+      subtotal: Number(data.subtotal),
+      shippingAmount: Number(data.shipping_amount),
+      paypalOrderId: data.paypal_order_id,
+      paypalCaptureId: data.paypal_capture_id,
       items: data.order_items.map((item) => ({
         id: item.id,
         productName: item.product_name_snapshot,
@@ -327,12 +340,49 @@ export function createAdminService(supabase: SupabaseClient) {
       payments: data.payments.map((payment) => ({
         id: payment.id,
         provider: payment.provider,
+        providerOrderId: payment.provider_order_id,
+        providerTransactionId: payment.provider_transaction_id,
         status: payment.status,
+        refundStatus: payment.refund_status,
         amount: Number(payment.amount),
         currency: payment.currency,
         createdAt: payment.created_at,
       })),
     };
+  }
+
+  async function updateOrderFulfillment(
+    actorId: string,
+    id: string,
+    input: {
+      fulfillmentStatus: "processing" | "shipped" | "fulfilled" | "returned";
+      shippingCarrier: string | null;
+      trackingNumber: string | null;
+    },
+  ): Promise<AdminOrder | null> {
+    const current = await getOrder(id);
+    if (!current) return null;
+    if (current.status === "refunded" || current.status === "cancelled") {
+      throw new AdminConflictError("A refunded or cancelled order cannot be fulfilled.");
+    }
+    const timestamp = new Date().toISOString();
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        fulfillment_status: input.fulfillmentStatus,
+        shipping_carrier: input.shippingCarrier,
+        tracking_number: input.trackingNumber,
+        ...(input.fulfillmentStatus === "shipped" ? { shipped_at: timestamp } : {}),
+        ...(input.fulfillmentStatus === "fulfilled" ? { fulfilled_at: timestamp } : {}),
+      })
+      .eq("id", id);
+    if (error) throw error;
+    await audit(actorId, "order.fulfillment_updated", "order", id);
+    return getOrder(id);
+  }
+
+  async function auditOrderAction(actorId: string, action: string, orderId: string): Promise<void> {
+    await audit(actorId, action, "order", orderId);
   }
 
   async function createProduct(actorId: string, input: ProductInput): Promise<AdminProduct> {
@@ -440,6 +490,8 @@ export function createAdminService(supabase: SupabaseClient) {
   return {
     getOverview,
     getOrder,
+    updateOrderFulfillment,
+    auditOrderAction,
     listOrders,
     listProducts,
     listCategories,
