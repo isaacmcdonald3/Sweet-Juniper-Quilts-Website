@@ -175,6 +175,30 @@ export function OwnerHomepagePage() {
     }
   }
 
+  async function saveFeaturedHeadings() {
+    if (!draft) return;
+    const savedHome = asObject(contentRow(content.data || [], "home")?.content);
+    const updatedHome = {
+      ...savedHome,
+      featuredEyebrow: asText(draft.home.featuredEyebrow, "ONE-OF-A-KIND AND MADE WITH CARE"),
+      featuredTitle: asText(draft.home.featuredTitle, "From the studio"),
+    };
+    setBusy("featured-headings");
+    setMessage("");
+    setError("");
+    try {
+      await requestAdminJson<void>("/api/admin/homepage-content/home", {
+        method: "PUT",
+        body: { content: updatedHome, isPublished: draft.published.home },
+      });
+      setMessage("Featured section headings were saved.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Featured section headings could not be saved.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   async function saveExtra(key: string, value: { contentText: string; isPublished: boolean }) {
     let parsedContent: unknown;
     try {
@@ -301,6 +325,11 @@ export function OwnerHomepagePage() {
 
           <section className="owner-panel owner-homepage-editor">
             <div className="owner-panel__heading"><h2>Featured products</h2></div>
+            <div className="owner-form-grid">
+              <label><span>Eyebrow</span><input maxLength={100} onChange={(event) => updateSection("home", "featuredEyebrow", event.target.value)} value={asText(draft.home.featuredEyebrow, "ONE-OF-A-KIND AND MADE WITH CARE")} /></label>
+              <label><span>Heading</span><input maxLength={180} onChange={(event) => updateSection("home", "featuredTitle", event.target.value)} value={asText(draft.home.featuredTitle, "From the studio")} /></label>
+            </div>
+            <button className="button button--primary" disabled={Boolean(busy)} onClick={() => void saveFeaturedHeadings()} type="button">{busy === "featured-headings" ? "Saving…" : "Save featured headings"}</button>
             {products.data?.filter((product) => product.isPublished && !product.archivedAt).length ? (
               <div className="owner-featured-list">
                 {products.data.filter((product) => product.isPublished && !product.archivedAt).map((product) => (

@@ -1,12 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CatalogProduct } from "@sweet-juniper/shared";
 
-function availability(product: CatalogProduct): string {
-  if (product.fulfillmentType === "made_to_order") return "Made to order";
-  if (product.inventoryQuantity === 0) return "Currently unavailable";
-  return "Ready to ship";
-}
-
 export function ProductCard({ product }: { product: CatalogProduct }) {
   const image = product.media.find((item) => item.mediaType === "image" && item.isPrimary)
     || product.media.find((item) => item.mediaType === "image");
@@ -20,7 +14,6 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
           alt={image?.altText || product.name}
           loading="lazy"
         />
-        {product.isFeatured && <span className="product-card__ribbon">A studio favorite</span>}
       </Link>
       <div className="product-card__details">
         <div className="product-card__heading">
@@ -29,9 +22,12 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
           </h3>
           <span className="product-card__price">{formatPrice(product.price)}</span>
         </div>
-        <p className="product-card__availability">{availability(product)}</p>
-        {product.category && <p className="product-card__category">{product.category.name}</p>}
-        {product.subcategory && <p className="product-card__category">{product.subcategory}</p>}
+        {(product.category || product.subcategory) && (
+          <div className="product-card__taxonomy">
+            {product.category && <strong>{product.category.name}</strong>}
+            {product.subcategory && <span>{product.subcategory}</span>}
+          </div>
+        )}
       </div>
     </article>
   );

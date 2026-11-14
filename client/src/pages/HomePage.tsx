@@ -39,6 +39,8 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
     : {};
 
   const heroTitle = getContentText(home, "title", "A little warmth, stitched to last.");
+  const featuredEyebrow = getContentText(home, "featuredEyebrow", "ONE-OF-A-KIND AND MADE WITH CARE");
+  const featuredTitle = getContentText(home, "featuredTitle", "From the studio");
   const heroText = getContentText(
     home,
     "introduction",
@@ -146,8 +148,8 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
       <section className="home-featured section-wrap" aria-labelledby="featured-title" key="featured">
         <div className="section-heading section-heading--row">
           <div>
-            <p className="eyebrow">ONE-OF-A-KIND AND MADE WITH CARE</p>
-            <h2 id="featured-title">From the studio</h2>
+            <p className="eyebrow">{featuredEyebrow}</p>
+            <h2 id="featured-title">{featuredTitle}</h2>
           </div>
           <Link className="text-link" to="/catalog">View the full collection <span aria-hidden="true">→</span></Link>
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { CatalogProduct } from "@sweet-juniper/shared";
 import { ProductGallery } from "../components/ProductGallery";
@@ -15,6 +15,8 @@ export function ProductDetailPage() {
   const [error, setError] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [feedback, setFeedback] = useState("");
+  const [addedQuantity, setAddedQuantity] = useState<number | null>(null);
+  const addToBagDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -36,6 +38,13 @@ export function ProductDetailPage() {
     };
   }, [slug]);
 
+  useEffect(() => {
+    const dialog = addToBagDialog.current;
+    if (!dialog) return;
+    if (addedQuantity !== null && !dialog.open) dialog.showModal();
+    else if (addedQuantity === null && dialog.open) dialog.close();
+  }, [addedQuantity]);
+
   if (loading) {
     return <main className="page-main page-state" role="status"><span className="loader loader--dark" />Opening the piece...</main>;
   }
@@ -54,8 +63,12 @@ export function ProductDetailPage() {
   const currentProduct = product;
 
   function addToBag() {
-    if (addItem(currentProduct, quantity)) setFeedback(`${currentProduct.name} was added to your bag.`);
-    else setFeedback("Please choose an available quantity.");
+    if (addItem(currentProduct, quantity)) {
+      setFeedback("");
+      setAddedQuantity(quantity);
+    } else {
+      setFeedback("Please choose an available quantity.");
+    }
   }
 
   return (
@@ -65,6 +78,7 @@ export function ProductDetailPage() {
         <ProductGallery key={product.id} media={product.media} productName={product.name} />
         <section className="product-detail__info">
           <p className="eyebrow">{product.category?.name || "HANDMADE BY SWEET JUNIPER"}</p>
+          {product.subcategory && <p className="product-detail__subcategory">{product.subcategory}</p>}
           <h1>{product.name}</h1>
           <p className="product-detail__price">{formatPrice(product.price)}</p>
           <p className="product-detail__availability">
@@ -75,15 +89,6 @@ export function ProductDetailPage() {
                 : `${product.inventoryQuantity} ready to ship`}
           </p>
           <p className="product-detail__description">{product.description || "A one-of-a-kind piece, carefully made in our studio."}</p>
-          {product.subcategory && <p className="product-detail__category">{product.subcategory}</p>}
-          <div className="product-detail__fulfillment">
-            {madeToOrder ? "Made to order with care" : "Ready to ship"}
-          </div>
-          {product.category && (
-            <p className="product-detail__category">
-              In <Link to={`/catalog?category=${encodeURIComponent(product.category.id)}`}>{product.category.name}</Link>
-            </p>
-          )}
           <div className="product-detail__purchase">
             <label>
               Quantity
@@ -107,9 +112,23 @@ export function ProductDetailPage() {
               {unavailable ? "Out of stock" : "Add to bag"}
             </button>
           </div>
-          <p className="form-feedback" role="status" aria-live="polite">{feedback}</p>
+          {feedback && <p className="form-feedback" role="status" aria-live="polite">{feedback}</p>}
         </section>
       </div>
+      <dialog
+        aria-labelledby="add-to-bag-title"
+        className="add-to-bag-dialog"
+        onClose={() => setAddedQuantity(null)}
+        ref={addToBagDialog}
+      >
+        <h2 id="add-to-bag-title">Added to your bag</h2>
+        <p><strong>{addedQuantity ?? quantity}</strong> × {product.name} was added to your bag.</p>
+        <p>Would you like to view your bag and checkout, or continue shopping?</p>
+        <div className="add-to-bag-dialog__actions">
+          <Link className="button button--primary" to="/cart">View bag and checkout</Link>
+          <button className="button button--outline" onClick={() => setAddedQuantity(null)} type="button">Continue shopping</button>
+        </div>
+      </dialog>
     </main>
   );
 }

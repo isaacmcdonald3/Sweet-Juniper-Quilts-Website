@@ -14,6 +14,7 @@ export function CatalogPage({ data }: { data: StorefrontHomepage }) {
   const [reload, setReload] = useState(0);
   const search = searchParams.get("q") || "";
   const categoryId = searchParams.get("category") || "";
+  const subcategory = searchParams.get("subcategory") || "";
   const sort = (searchParams.get("sort") || "newest") as SortOrder;
 
   useEffect(() => {
@@ -35,14 +36,22 @@ export function CatalogPage({ data }: { data: StorefrontHomepage }) {
     };
   }, [reload]);
 
+  const subcategories = useMemo(() => [...new Set(
+    products
+      .filter((product) => !categoryId || product.categoryId === categoryId)
+      .map((product) => product.subcategory)
+      .filter((value): value is string => Boolean(value)),
+  )].sort((left, right) => left.localeCompare(right)), [categoryId, products]);
+
   const visibleProducts = useMemo(() => {
     const term = search.trim().toLocaleLowerCase();
     const filtered = products.filter((product) => {
       const matchesCategory = !categoryId || product.categoryId === categoryId;
+      const matchesSubcategory = !subcategory || product.subcategory === subcategory;
       const matchesSearch = !term ||
         product.name.toLocaleLowerCase().includes(term) ||
         product.description.toLocaleLowerCase().includes(term);
-      return matchesCategory && matchesSearch;
+      return matchesCategory && matchesSubcategory && matchesSearch;
     });
 
     return filtered.sort((left, right) => {
@@ -51,12 +60,20 @@ export function CatalogPage({ data }: { data: StorefrontHomepage }) {
       if (sort === "name") return left.name.localeCompare(right.name);
       return 0;
     });
-  }, [categoryId, products, search, sort]);
+  }, [categoryId, products, search, sort, subcategory]);
 
   function updateParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(key, value);
     else next.delete(key);
+    setSearchParams(next, { replace: true });
+  }
+
+  function updateCategory(value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set("category", value);
+    else next.delete("category");
+    next.delete("subcategory");
     setSearchParams(next, { replace: true });
   }
 
@@ -81,11 +98,18 @@ export function CatalogPage({ data }: { data: StorefrontHomepage }) {
           </label>
           <label>
             <span>Category</span>
-            <select value={categoryId} onChange={(event) => updateParam("category", event.target.value)}>
+            <select value={categoryId} onChange={(event) => updateCategory(event.target.value)}>
               <option value="">All pieces</option>
               {data.categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
+            </select>
+          </label>
+          <label>
+            <span>Subcategory</span>
+            <select value={subcategory} onChange={(event) => updateParam("subcategory", event.target.value)}>
+              <option value="">All subcategories</option>
+              {subcategories.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
           <label>
