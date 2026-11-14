@@ -20,7 +20,6 @@ export interface EmailOrder {
   trackingNumber: string | null;
   items: Array<{
     name: string;
-    sku: string;
     quantity: number;
     unitPrice: number;
     lineTotal: number;
@@ -86,7 +85,7 @@ function layout(title: string, content: string, baseUrl: string): string {
 function orderItems(order: EmailOrder): string {
   return order.items.map((item) => `
     <tr>
-      <td style="padding:10px 6px;border-bottom:1px solid #e9e2d7">${escapeHtml(item.name)}<br><small style="color:#777367">${escapeHtml(item.sku)}</small></td>
+      <td style="padding:10px 6px;border-bottom:1px solid #e9e2d7">${escapeHtml(item.name)}</td>
       <td align="center" style="padding:10px 6px;border-bottom:1px solid #e9e2d7">${item.quantity}</td>
       <td align="right" style="padding:10px 6px;border-bottom:1px solid #e9e2d7">${formatCurrency(item.lineTotal, order.currency)}</td>
     </tr>`).join("");
@@ -179,7 +178,7 @@ export function renderEmail(
   }
   const html = layout(title, `<p>${intro}</p>${key === "owner_new_paid_order" ? orderSummary(order, false) : summary}`, baseUrl);
   const textItems = order.items.map((item) =>
-    `${item.name} (${item.sku}) × ${item.quantity}: ${formatCurrency(item.lineTotal, order.currency)}`,
+    `${item.name} × ${item.quantity}: ${formatCurrency(item.lineTotal, order.currency)}`,
   );
   const addressText = key === "owner_new_paid_order"
     ? ""

@@ -1,7 +1,7 @@
 import multer from "multer";
 import type { RequestHandler } from "express";
 import type { Logger } from "pino";
-import type { AdminProductMedia, CloudinaryUploadLimits } from "@sweet-juniper/shared";
+import type { AdminHomepageMedia, AdminProductMedia, CloudinaryUploadLimits } from "@sweet-juniper/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   IMAGE_MIME_TYPES,
@@ -33,6 +33,16 @@ interface ProductMediaRow {
   deleted_at: string | null;
   cleanup_pending_assets: PendingAsset[] | null;
   products?: { name: string } | Array<{ name: string }> | null;
+}
+
+interface HomepageMediaRow {
+  id: string;
+  media_type: CloudinaryResourceType;
+  cloudinary_asset_id: string;
+  cloudinary_public_id: string;
+  media_url: string;
+  alt_text: string | null;
+  created_at: string;
 }
 
 interface UploadFile {
@@ -88,6 +98,19 @@ function mapMedia(
   };
 }
 
+function mapHomepageMedia(row: HomepageMediaRow, cloudinary: CloudinaryMediaClient): AdminHomepageMedia {
+  return {
+    id: row.id,
+    cloudinaryAssetId: row.cloudinary_asset_id,
+    mediaType: row.media_type,
+    url: cloudinary.deliveryUrl(row.cloudinary_public_id, row.media_type) || row.media_url,
+    altText: row.alt_text,
+    posterUrl: null,
+    isPrimary: false,
+    sortOrder: 0,
+  };
+}
+
 function contentContainsReference(value: unknown, references: Set<string>): boolean {
   if (typeof value === "string") return references.has(value);
   if (Array.isArray(value)) return value.some((entry) => contentContainsReference(entry, references));
@@ -132,11 +155,12 @@ export function createMediaService(
     action: string,
     mediaId: string,
     details: Record<string, unknown> = {},
+    entityType = "product_media",
   ): Promise<void> {
     const { error } = await supabase.from("admin_audit_logs").insert({
       actor_user_id: actorId,
       action,
-      entity_type: "product_media",
+      entity_type: entityType,
       entity_id: mediaId,
       details,
     });
@@ -327,6 +351,61 @@ export function createMediaService(
       .limit(1000);
     if (error) throw error;
     return (data as ProductMediaRow[]).map((row) => mapMedia(row, cloudinary));
+  }
+
+  async function listHomepageMedia(): Promise<AdminHomepageMedia[]> {
+    const { data, error } = await supabase
+      .from("homepage_media")
+      .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (error) throw error;
+    return (data as HomepageMediaRow[]).map((row) => mapHomepageMedia(row, cloudinary));
+  }
+
+  async function uploadHomepageMedia(
+    actorId: string,
+    file: UploadFile,
+    mediaType: CloudinaryResourceType,
+    altText: string | null,
+  ): Promise<AdminHomepageMedia> {
+    if ((mediaType === "image" && !IMAGE_MIME_TYPES.includes(file.mimetype)) ||
+        (mediaType === "video" && !VIDEO_MIME_TYPES.includes(file.mimetype))) {
+      throw new UploadValidationError("The selected file type does not match the media type.");
+    }
+    const limit = mediaType === "image" ? cloudinary.imageMaxBytes : cloudinary.videoMaxBytes;
+    if (file.size > limit) {
+      throw new UploadValidationError(`This file exceeds the ${mediaType} upload size limit.`);
+    }
+
+    const uploaded = await cloudinary.upload(
+      file.buffer,
+      file.mimetype,
+      mediaType,
+      "sweet-juniper/homepage",
+    );
+    let row: HomepageMediaRow;
+    try {
+      const { data, error } = await supabase
+        .from("homepage_media")
+        .insert({
+          media_type: uploaded.resourceType,
+          cloudinary_asset_id: uploaded.assetId,
+          cloudinary_public_id: uploaded.publicId,
+          media_url: uploaded.secureUrl,
+          alt_text: altText,
+        })
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at")
+        .single();
+      if (error) throw error;
+      row = data as HomepageMediaRow;
+    } catch (error) {
+      await removeUploadedAsset(uploaded.publicId, mediaType);
+      throw error;
+    }
+
+    await audit(actorId, "homepage_media.uploaded", row.id, { mediaType }, "homepage_media");
+    return mapHomepageMedia(row, cloudinary);
   }
 
   async function updateProductMedia(
@@ -567,6 +646,8 @@ export function createMediaService(
     uploadProductMedia,
     listProductMedia,
     listAllMedia,
+    listHomepageMedia,
+    uploadHomepageMedia,
     updateProductMedia,
     removeProductMedia,
     setVideoPoster,

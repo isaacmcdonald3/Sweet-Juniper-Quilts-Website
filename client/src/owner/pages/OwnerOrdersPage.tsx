@@ -133,7 +133,7 @@ export function OwnerOrdersPage() {
               <p><strong>Order #{order.orderNumber}</strong> · {order.customerName} · <a href={`mailto:${order.customerEmail}`}>{order.customerEmail}</a></p>
               <p>Placed {new Date(order.createdAt).toLocaleString()} · Order status: {order.status} · Payment status: {order.paymentStatus}</p>
               <h3>Items</h3>
-              <ul className="owner-order-items">{order.items.map((item) => <li key={item.id}>{item.productName} ({item.sku}) × {item.quantity} · {formatCurrency(item.unitPrice, order.currency)} each<strong>{formatCurrency(item.lineTotal, order.currency)}</strong></li>)}</ul>
+              <ul className="owner-order-items">{order.items.map((item) => <li key={item.id}>{item.productName} × {item.quantity} · {formatCurrency(item.unitPrice, order.currency)} each<strong>{formatCurrency(item.lineTotal, order.currency)}</strong></li>)}</ul>
               <p>Subtotal {formatCurrency(order.subtotal, order.currency)} · Shipping {formatCurrency(order.shippingAmount, order.currency)} · Total <strong>{formatCurrency(order.totalAmount, order.currency)}</strong></p>
               <h3>Shipping</h3>
               <p>{Object.values(order.shippingAddress).filter((value) => typeof value === "string" && value.trim()).join(", ") || "No shipping address recorded."}</p>

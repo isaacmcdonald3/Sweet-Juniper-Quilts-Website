@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { formatPrice } from "../components/ProductCard";
 import { useCart } from "../hooks/cart-context";
@@ -18,12 +18,68 @@ interface PreparedOrder {
   subtotal: string;
   shippingAmount: string;
   amount: string;
-  items: Array<{ name: string; sku: string; quantity: number; unitPrice: string; lineTotal: string }>;
+  items: Array<{ name: string; quantity: number; unitPrice: string; lineTotal: string }>;
 }
 
 interface CheckoutReceipt {
   orderNumber: number;
   total: number;
+}
+
+interface ShippingDetails {
+  name: string;
+  email: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  region: string;
+  postalCode: string;
+  country: string;
+}
+
+const shippingDetailsKey = "sjq-checkout-shipping-details";
+const emptyShippingDetails: ShippingDetails = {
+  name: "",
+  email: "",
+  addressLine1: "",
+  addressLine2: "",
+  city: "",
+  region: "",
+  postalCode: "",
+  country: "US",
+};
+
+function isShippingDetails(value: unknown): value is ShippingDetails {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const fields: Array<keyof ShippingDetails> = [
+    "name",
+    "email",
+    "addressLine1",
+    "addressLine2",
+    "city",
+    "region",
+    "postalCode",
+    "country",
+  ];
+  return fields.every((field) => typeof (value as Record<string, unknown>)[field] === "string");
+}
+
+function readShippingDetails(): ShippingDetails {
+  const stored = sessionStorage.getItem(shippingDetailsKey);
+  if (!stored) return emptyShippingDetails;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch (cause) {
+    console.error("Checkout details stored in this tab are invalid.", cause);
+  }
+  if (isShippingDetails(parsed)) return parsed;
+  try {
+    sessionStorage.removeItem(shippingDetailsKey);
+  } catch (cause) {
+    console.error("Invalid checkout details could not be cleared from this tab.", cause);
+  }
+  return emptyShippingDetails;
 }
 
 interface PaypalButtons {
@@ -90,6 +146,18 @@ export function CheckoutPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [captureNeedsRetry, setCaptureNeedsRetry] = useState(false);
+  const [shippingDetails, setShippingDetails] = useState(readShippingDetails);
+
+  function updateShippingDetails(event: ChangeEvent<HTMLInputElement>) {
+    const next = { ...shippingDetails, [event.currentTarget.name]: event.currentTarget.value };
+    setShippingDetails(next);
+    try {
+      sessionStorage.setItem(shippingDetailsKey, JSON.stringify(next));
+    } catch (cause) {
+      console.error("Checkout details could not be retained in this tab.", cause);
+      setError("Your details are entered, but this browser could not retain them if you leave checkout.");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -118,6 +186,12 @@ export function CheckoutPage() {
         paypalOrderId,
       });
       clear();
+      setShippingDetails(emptyShippingDetails);
+      try {
+        sessionStorage.removeItem(shippingDetailsKey);
+      } catch (cause) {
+        console.error("Checkout details could not be cleared from this tab.", cause);
+      }
       setReceipt(result);
       setPrepared(null);
       setCaptureNeedsRetry(false);
@@ -237,14 +311,14 @@ export function CheckoutPage() {
 
       {!prepared ? (
         <form className="checkout-form" onSubmit={(event) => void prepareCheckout(event)}>
-          <label><span>Full name</span><input autoComplete="name" maxLength={120} name="name" required /></label>
-          <label><span>Email address</span><input autoComplete="email" maxLength={254} name="email" required type="email" /></label>
-          <label className="checkout-form__wide"><span>Street address</span><input autoComplete="address-line1" maxLength={150} name="addressLine1" required /></label>
-          <label className="checkout-form__wide"><span>Apartment, suite, etc. (optional)</span><input autoComplete="address-line2" maxLength={150} name="addressLine2" /></label>
-          <label><span>City</span><input autoComplete="address-level2" maxLength={100} name="city" required /></label>
-          <label><span>State / region</span><input autoComplete="address-level1" maxLength={100} name="region" required /></label>
-          <label><span>Postal code</span><input autoComplete="postal-code" maxLength={24} name="postalCode" required /></label>
-          <label><span>Country code</span><input autoComplete="country" defaultValue="US" maxLength={2} name="country" required /></label>
+          <label><span>Full name</span><input autoComplete="name" maxLength={120} name="name" onChange={updateShippingDetails} required value={shippingDetails.name} /></label>
+          <label><span>Email address</span><input autoComplete="email" maxLength={254} name="email" onChange={updateShippingDetails} required type="email" value={shippingDetails.email} /></label>
+          <label className="checkout-form__wide"><span>Street address</span><input autoComplete="address-line1" maxLength={150} name="addressLine1" onChange={updateShippingDetails} required value={shippingDetails.addressLine1} /></label>
+          <label className="checkout-form__wide"><span>Apartment, suite, etc. (optional)</span><input autoComplete="address-line2" maxLength={150} name="addressLine2" onChange={updateShippingDetails} value={shippingDetails.addressLine2} /></label>
+          <label><span>City</span><input autoComplete="address-level2" maxLength={100} name="city" onChange={updateShippingDetails} required value={shippingDetails.city} /></label>
+          <label><span>State / region</span><input autoComplete="address-level1" maxLength={100} name="region" onChange={updateShippingDetails} required value={shippingDetails.region} /></label>
+          <label><span>Postal code</span><input autoComplete="postal-code" maxLength={24} name="postalCode" onChange={updateShippingDetails} required value={shippingDetails.postalCode} /></label>
+          <label><span>Country code</span><input autoComplete="country" maxLength={2} name="country" onChange={updateShippingDetails} required value={shippingDetails.country} /></label>
           <div className="checkout-form__wide checkout-review">
             <h2>Items in your bag</h2>
             <ul>{items.map(({ product, quantity }) => (
@@ -264,7 +338,7 @@ export function CheckoutPage() {
         <section className="checkout-review">
           <h2>Review your verified order</h2>
           <ul>{prepared.items.map((item) => (
-            <li key={`${item.sku}-${item.name}`}>
+            <li key={`${item.name}-${item.quantity}`}>
               <span>{item.name} × {item.quantity} <small>{formatPrice(Number(item.unitPrice))} each</small></span>
               <strong>{formatPrice(Number(item.lineTotal))}</strong>
             </li>

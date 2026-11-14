@@ -47,7 +47,7 @@ export interface CatalogProduct {
   slug: string;
   description: string;
   price: number;
-  sku: string;
+  subcategory: string | null;
   categoryId: string | null;
   category: CatalogCategory | null;
   inventoryQuantity: number;
@@ -81,6 +81,8 @@ export interface AdminProductMedia extends CatalogProductMedia {
     | { assetId: string; resourceType: "image" | "video" }
   >;
 }
+
+export type AdminHomepageMedia = CatalogProductMedia;
 
 export interface CloudinaryUploadLimits {
   configured: boolean;
@@ -148,7 +150,6 @@ export interface AdminOrder extends AdminOrderSummary {
   items: Array<{
     id: string;
     productName: string;
-    sku: string;
     quantity: number;
     unitPrice: number;
     lineTotal: number;

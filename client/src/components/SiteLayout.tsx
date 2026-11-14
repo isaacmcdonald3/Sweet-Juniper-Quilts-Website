@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import type { StorefrontHomepage } from "@sweet-juniper/shared";
 import { useCart } from "../hooks/cart-context";
 import { getContentSection, getContentText } from "../utils/homepage-content";
+import { StarMark } from "./StarMark";
 
 export function SiteLayout({ data }: { data: StorefrontHomepage }) {
   const { itemCount } = useCart();
@@ -12,7 +13,7 @@ export function SiteLayout({ data }: { data: StorefrontHomepage }) {
     <div className="shop-shell">
       <header className="shop-header">
         <Link className="brand" to="/" aria-label="Sweet Juniper Quilts home">
-          <span className="brand__mark" aria-hidden="true">✳</span>
+          <span className="brand__mark"><StarMark /></span>
           <span>Sweet Juniper Quilts</span>
         </Link>
         <nav className="shop-nav" aria-label="Main navigation">
@@ -30,7 +31,7 @@ export function SiteLayout({ data }: { data: StorefrontHomepage }) {
         <div className="shop-footer__top">
           <div>
             <Link className="brand" to="/">
-              <span className="brand__mark" aria-hidden="true">✳</span>
+              <span className="brand__mark"><StarMark /></span>
               <span>Sweet Juniper Quilts</span>
             </Link>
             <p>Thoughtful quilts and kinusaiga, made slowly and meant to be cherished.</p>

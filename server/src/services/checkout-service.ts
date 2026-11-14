@@ -27,7 +27,6 @@ type CustomerDetails = {
 type ReservationItem = {
   product_id: string | null;
   product_name_snapshot: string;
-  product_sku_snapshot: string;
   quantity: number;
   unit_price: number | string;
   line_total: number | string;
@@ -154,7 +153,7 @@ export function createCheckoutService(supabase: SupabaseClient, config: Checkout
   async function readReservation(id: string): Promise<Reservation | null> {
     const { data, error } = await supabase
       .from("checkout_reservations")
-      .select("id,status,customer_name,customer_email,shipping_address,subtotal,shipping_amount,total_amount,currency,paypal_order_id,expires_at,checkout_reservation_items(product_id,product_name_snapshot,product_sku_snapshot,quantity,unit_price,line_total)")
+      .select("id,status,customer_name,customer_email,shipping_address,subtotal,shipping_amount,total_amount,currency,paypal_order_id,expires_at,checkout_reservation_items(product_id,product_name_snapshot,quantity,unit_price,line_total)")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
@@ -174,7 +173,7 @@ export function createCheckoutService(supabase: SupabaseClient, config: Checkout
     subtotal: string;
     shippingAmount: string;
     amount: string;
-    items: Array<{ name: string; sku: string; quantity: number; unitPrice: string; lineTotal: string }>;
+    items: Array<{ name: string; quantity: number; unitPrice: string; lineTotal: string }>;
   }> {
     const { clientId } = requirePaypalCredentials();
     const { data, error } = await supabase.rpc("create_checkout_reservation", {
@@ -218,7 +217,6 @@ export function createCheckoutService(supabase: SupabaseClient, config: Checkout
         amount: money(reservation.total_amount),
         items: reservation.items.map((item) => ({
           name: item.product_name_snapshot,
-          sku: item.product_sku_snapshot,
           quantity: item.quantity,
           unitPrice: money(item.unit_price),
           lineTotal: money(item.line_total),
@@ -245,7 +243,6 @@ export function createCheckoutService(supabase: SupabaseClient, config: Checkout
             },
             items: reservation.items.map((item) => ({
               name: item.product_name_snapshot.slice(0, 127),
-              sku: item.product_sku_snapshot.slice(0, 127),
               quantity: String(item.quantity),
               category: "PHYSICAL_GOODS",
               unit_amount: {
@@ -278,7 +275,6 @@ export function createCheckoutService(supabase: SupabaseClient, config: Checkout
         amount: money(reservation.total_amount),
         items: reservation.items.map((item) => ({
           name: item.product_name_snapshot,
-          sku: item.product_sku_snapshot,
           quantity: item.quantity,
           unitPrice: money(item.unit_price),
           lineTotal: money(item.line_total),

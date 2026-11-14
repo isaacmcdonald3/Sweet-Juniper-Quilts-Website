@@ -4,6 +4,7 @@ import { formatPrice } from "../components/ProductCard";
 import { useCart } from "../hooks/cart-context";
 import { maximumQuantity } from "../hooks/cart-state";
 import { fetchApiJson } from "../services/storefront-api";
+import { StarMark } from "../components/StarMark";
 
 interface CheckoutConfig {
   shippingAmount: number;
@@ -29,7 +30,7 @@ export function CartPage() {
       </div>
       {items.length === 0 ? (
         <div className="cart-empty">
-          <span aria-hidden="true">✳</span>
+          <StarMark />
           <h2>Your bag is waiting for something lovely.</h2>
           <p>Take a look around the studio and find a piece to make your own.</p>
           <Link className="button button--primary" to="/catalog">Explore the collection</Link>

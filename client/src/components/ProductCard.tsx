@@ -31,6 +31,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         </div>
         <p className="product-card__availability">{availability(product)}</p>
         {product.category && <p className="product-card__category">{product.category.name}</p>}
+        {product.subcategory && <p className="product-card__category">{product.subcategory}</p>}
       </div>
     </article>
   );

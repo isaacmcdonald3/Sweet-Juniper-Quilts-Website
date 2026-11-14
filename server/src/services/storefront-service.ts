@@ -6,10 +6,11 @@ import type {
   StorefrontBootstrap,
   StorefrontHomepage,
 } from "@sweet-juniper/shared";
+import type { AdminHomepageMedia } from "@sweet-juniper/shared";
 import type { CloudinaryMediaClient } from "./cloudinary-service.js";
 
 const productSelection =
-  "id,name,slug,description,price,sku,category_id,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_cloudinary_public_id,poster_url,deleted_at)";
+  "id,name,slug,description,price,category_id,subcategory,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_cloudinary_public_id,poster_url,deleted_at)";
 
 function mapCategory(category: {
   id: string;
@@ -31,8 +32,8 @@ function mapProduct(row: {
   slug: string;
   description: string | null;
   price: number | string;
-  sku: string;
   category_id: string | null;
+  subcategory: string | null;
   inventory_quantity: number;
   fulfillment_type: "ready_to_ship" | "made_to_order";
   is_featured: boolean;
@@ -89,7 +90,7 @@ function mapProduct(row: {
     slug: row.slug,
     description: row.description || "",
     price: Number(row.price),
-    sku: row.sku,
+    subcategory: row.subcategory,
     categoryId: row.category_id,
     category: category ? mapCategory(category) : null,
     inventoryQuantity: row.inventory_quantity,
@@ -149,15 +150,20 @@ export function createStorefrontService(
   }
 
   async function loadHomepage(): Promise<StorefrontHomepage> {
-    const [categories, products, contentResult] = await Promise.all([
+    const [categories, products, contentResult, homepageMediaResult] = await Promise.all([
       listCategories(),
       listProducts(),
       supabase
         .from("homepage_content")
         .select("content_key,content,is_published"),
+      supabase
+        .from("homepage_media")
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text")
+        .order("created_at", { ascending: false }),
     ]);
 
     if (contentResult.error) throw contentResult.error;
+    if (homepageMediaResult.error) throw homepageMediaResult.error;
     const content = Object.fromEntries(
       contentResult.data
         .filter((row) => row.is_published)
@@ -170,7 +176,26 @@ export function createStorefrontService(
       content,
       categories,
       featuredProducts: products.filter((product) => product.isFeatured),
-      mediaLibrary: products.flatMap((product) => product.media),
+      mediaLibrary: [
+        ...products.flatMap((product) => product.media),
+        ...(homepageMediaResult.data as Array<{
+          id: string;
+          media_type: "image" | "video";
+          cloudinary_asset_id: string;
+          cloudinary_public_id: string;
+          media_url: string;
+          alt_text: string | null;
+        }>).map((item): AdminHomepageMedia => ({
+          id: item.id,
+          cloudinaryAssetId: item.cloudinary_asset_id,
+          mediaType: item.media_type,
+          url: cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url,
+          altText: item.alt_text,
+          posterUrl: null,
+          isPrimary: false,
+          sortOrder: 0,
+        })),
+      ],
       publishedSections,
     };
   }

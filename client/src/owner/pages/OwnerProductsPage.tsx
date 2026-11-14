@@ -8,8 +8,8 @@ interface ProductFields {
   name: string;
   description: string;
   price: number;
-  sku: string;
   categoryId: string;
+  subcategory: string;
   inventoryQuantity: number;
   lowInventoryThreshold: number;
   fulfillmentType: ProductFulfillmentType;
@@ -23,8 +23,8 @@ function fieldsFromProduct(product?: AdminProduct): ProductFields {
     name: product?.name || "",
     description: product?.description || "",
     price: product?.price || 0,
-    sku: product?.sku || "",
     categoryId: product?.categoryId || "",
+    subcategory: product?.subcategory || "",
     inventoryQuantity: product?.inventoryQuantity || 0,
     lowInventoryThreshold: product?.lowInventoryThreshold ?? 2,
     fulfillmentType: product?.fulfillmentType || "ready_to_ship",
@@ -35,7 +35,11 @@ function fieldsFromProduct(product?: AdminProduct): ProductFields {
 }
 
 function productPayload(fields: ProductFields) {
-  return { ...fields, categoryId: fields.categoryId || null };
+  return {
+    ...fields,
+    categoryId: fields.categoryId || null,
+    subcategory: fields.categoryId ? fields.subcategory.trim() || null : null,
+  };
 }
 
 function productStatus(product: AdminProduct): string {
@@ -120,9 +124,9 @@ export function OwnerProductsPage() {
           </div>
           <div className="owner-form-grid">
             <label><span>Product name</span><input maxLength={150} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, name: event.target.value } })} required value={editing.fields.name} /></label>
-            <label><span>SKU</span><input maxLength={64} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, sku: event.target.value } })} required value={editing.fields.sku} /></label>
             <label><span>Price (USD)</span><input min="0" onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, price: Number(event.target.value) } })} required step="0.01" type="number" value={editing.fields.price} /></label>
-            <label><span>Category</span><select onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, categoryId: event.target.value } })} value={editing.fields.categoryId}><option value="">Uncategorized</option>{(categories.data || []).map((category) => <option key={category.id} value={category.id}>{category.name}{category.isPublished ? "" : " (hidden)"}</option>)}</select></label>
+            <label><span>Category</span><select onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, categoryId: event.target.value, subcategory: event.target.value ? editing.fields.subcategory : "" } })} value={editing.fields.categoryId}><option value="">Uncategorized</option>{(categories.data || []).map((category) => <option key={category.id} value={category.id}>{category.name}{category.isPublished ? "" : " (hidden)"}</option>)}</select></label>
+            <label><span>Subcategory (optional)</span><input disabled={!editing.fields.categoryId} maxLength={100} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, subcategory: event.target.value } })} value={editing.fields.subcategory} /></label>
             <label className="owner-form-grid__wide"><span>Description</span><textarea maxLength={5000} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, description: event.target.value } })} rows={5} value={editing.fields.description} /></label>
             <label><span>Fulfillment</span><select onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, fulfillmentType: event.target.value as ProductFulfillmentType } })} value={editing.fields.fulfillmentType}><option value="ready_to_ship">Ready to ship</option><option value="made_to_order">Made to order</option></select></label>
             <label><span>Inventory quantity</span><input min="0" onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, inventoryQuantity: Number(event.target.value) } })} required type="number" value={editing.fields.inventoryQuantity} /></label>
@@ -144,7 +148,7 @@ export function OwnerProductsPage() {
               <thead><tr><th>Product</th><th>Status</th><th>Price</th><th>Inventory</th><th>Actions</th></tr></thead>
               <tbody>{products.data.map((product) => (
                 <tr key={product.id}>
-                  <td><strong>{product.name}</strong><small>{product.sku} · {product.category?.name || "Uncategorized"}</small></td>
+                  <td><strong>{product.name}</strong><small>{product.category?.name || "Uncategorized"}{product.subcategory ? ` · ${product.subcategory}` : ""}</small></td>
                   <td><span className={`owner-status ${product.archivedAt ? "owner-status--muted" : ""}`}>{productStatus(product)}</span></td>
                   <td>${product.price.toFixed(2)}</td>
                   <td>{product.fulfillmentType === "made_to_order" ? "Made to order" : `${product.inventoryQuantity} available`}</td>

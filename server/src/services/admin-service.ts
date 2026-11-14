@@ -10,7 +10,7 @@ import type {
 import type { ProductFulfillmentType } from "@sweet-juniper/shared";
 
 const productSelection =
-  "id,name,slug,description,price,sku,category_id,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
+  "id,name,slug,description,price,category_id,subcategory,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
 
 export class AdminConflictError extends Error {}
 
@@ -18,8 +18,8 @@ interface ProductInput {
   name: string;
   description: string;
   price: number;
-  sku: string;
   categoryId: string | null;
+  subcategory: string | null;
   inventoryQuantity: number;
   lowInventoryThreshold: number;
   fulfillmentType: ProductFulfillmentType;
@@ -65,8 +65,8 @@ interface AdminProductRow {
   slug: string;
   description: string | null;
   price: number | string;
-  sku: string;
   category_id: string | null;
+  subcategory: string | null;
   inventory_quantity: number;
   low_inventory_threshold: number;
   fulfillment_type: ProductFulfillmentType;
@@ -107,7 +107,6 @@ interface AdminOrderDetailRow extends AdminOrderRow {
   order_items: Array<{
     id: string;
     product_name_snapshot: string;
-    product_sku_snapshot: string;
     quantity: number;
     unit_price: number | string;
     line_total: number | string;
@@ -162,8 +161,8 @@ function mapProduct(row: AdminProductRow): AdminProduct {
     slug: row.slug,
     description: row.description || "",
     price: Number(row.price),
-    sku: row.sku,
     categoryId: row.category_id,
+    subcategory: row.subcategory,
     category: category
       ? {
           id: category.id,
@@ -215,8 +214,8 @@ function toProductRow(input: ProductInput, slug?: string) {
     ...(slug ? { slug } : {}),
     description: input.description,
     price: input.price,
-    sku: input.sku,
     category_id: input.categoryId,
+    subcategory: input.subcategory,
     inventory_quantity: input.inventoryQuantity,
     low_inventory_threshold: input.lowInventoryThreshold,
     fulfillment_type: input.fulfillmentType,
@@ -313,7 +312,7 @@ export function createAdminService(supabase: SupabaseClient) {
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,subtotal,shipping_amount,shipping_address,shipping_carrier,tracking_number,paypal_order_id,paypal_capture_id,order_items(id,product_name_snapshot,product_sku_snapshot,quantity,unit_price,line_total),payments(id,provider,provider_order_id,provider_transaction_id,status,refund_status,amount,currency,created_at)",
+        "id,order_number,status,customer_name,customer_email,total_amount,currency,fulfillment_status,created_at,subtotal,shipping_amount,shipping_address,shipping_carrier,tracking_number,paypal_order_id,paypal_capture_id,order_items(id,product_name_snapshot,quantity,unit_price,line_total),payments(id,provider,provider_order_id,provider_transaction_id,status,refund_status,amount,currency,created_at)",
       )
       .eq("id", id)
       .maybeSingle();
@@ -332,7 +331,6 @@ export function createAdminService(supabase: SupabaseClient) {
       items: data.order_items.map((item) => ({
         id: item.id,
         productName: item.product_name_snapshot,
-        sku: item.product_sku_snapshot,
         quantity: item.quantity,
         unitPrice: Number(item.unit_price),
         lineTotal: Number(item.line_total),

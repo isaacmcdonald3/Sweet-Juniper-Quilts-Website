@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useOwnerAuth } from "./owner-auth";
+import { StarMark } from "../components/StarMark";
 
 export function OwnerLoginPage() {
   const { configured, loading, session, sessionError, signIn, signOut } = useOwnerAuth();
@@ -48,7 +49,7 @@ export function OwnerLoginPage() {
     <main className="owner-login">
       <section className="owner-login__card">
         <Link className="brand" to="/" aria-label="Return to Sweet Juniper Quilts">
-          <span className="brand__mark" aria-hidden="true">✳</span>
+          <span className="brand__mark"><StarMark /></span>
           <span>Sweet Juniper Quilts</span>
         </Link>
         <p className="eyebrow">PRIVATE OWNER AREA</p>

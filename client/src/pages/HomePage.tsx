@@ -4,6 +4,7 @@ import type { CatalogProductMedia, StorefrontHomepage } from "@sweet-juniper/sha
 import { ProductCard } from "../components/ProductCard";
 import { requestApi } from "../services/storefront-api";
 import { getContentSection, getContentText } from "../utils/homepage-content";
+import { StarMark } from "../components/StarMark";
 
 const defaultSectionOrder = ["categories", "featured", "about", "promotion", "contact"];
 
@@ -130,7 +131,7 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
                 key={category.id}
                 to={`/catalog?category=${encodeURIComponent(category.id)}`}
               >
-                <span aria-hidden="true">✳</span>
+                <StarMark />
                 <strong>{category.name}</strong>
                 {category.description && <small>{category.description}</small>}
               </Link>

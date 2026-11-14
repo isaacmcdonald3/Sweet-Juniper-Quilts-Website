@@ -63,7 +63,7 @@ const app = createApp({
           slug,
           description: "A quilt stitched by hand.",
           price: 180,
-          sku: "Q-001",
+          subcategory: null,
           categoryId: null,
           category: null,
           inventoryQuantity: 1,
@@ -153,6 +153,23 @@ test("administrative requests require the configured owner identity", async () =
     .set("Authorization", "Bearer owner-token")
     .send({ name: "" })
     .expect(400, { error: "Product details are invalid." });
+  await request(app)
+    .post("/api/admin/products")
+    .set("Authorization", "Bearer owner-token")
+    .send({
+      name: "Baby Quilt",
+      description: "",
+      price: 180,
+      categoryId: null,
+      subcategory: "Baby Quilts",
+      inventoryQuantity: 1,
+      lowInventoryThreshold: 2,
+      fulfillmentType: "ready_to_ship",
+      isPublished: true,
+      isFeatured: false,
+      isArchived: false,
+    })
+    .expect(400, { error: "Product details are invalid." });
 });
 
 test("contact form validates submissions and email logs remain owner-only", async () => {
@@ -165,6 +182,7 @@ test("contact form validates submissions and email logs remain owner-only", asyn
 
 test("media endpoints are owner-only and report when Cloudinary is not configured", async () => {
   await request(app).get("/api/admin/media/limits").expect(401);
+  await request(app).get("/api/admin/homepage-media").expect(401);
   await request(app)
     .get("/api/admin/media/limits")
     .set("Authorization", "Bearer customer-token")
@@ -186,6 +204,11 @@ test("media endpoints are owner-only and report when Cloudinary is not configure
     .expect(403);
   await request(app)
     .post("/api/admin/products/cbf8b29c-0f99-48bb-8e5e-2f246fcdd76e/media")
+    .set("Authorization", "Bearer owner-token")
+    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
+    .expect(503, { error: "Media uploads are not configured yet." });
+  await request(app)
+    .post("/api/admin/homepage-media")
     .set("Authorization", "Bearer owner-token")
     .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
     .expect(503, { error: "Media uploads are not configured yet." });
@@ -265,7 +288,7 @@ test("transactional templates escape user content and keep owner mail minimal", 
     currency: "USD",
     shippingCarrier: "USPS",
     trackingNumber: "12345",
-    items: [{ name: "<Quilt>", sku: "Q-1", quantity: 1, unitPrice: 35, lineTotal: 35 }],
+    items: [{ name: "<Quilt>", quantity: 1, unitPrice: 35, lineTotal: 35 }],
   };
   const shipping = renderEmail("customer_shipping_confirmation", order, null, "https://shop.example");
   assert.match(shipping.html, /&lt;script&gt;/);

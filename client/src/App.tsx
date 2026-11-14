@@ -3,6 +3,7 @@ import { BrowserRouter } from "react-router-dom";
 import type { StorefrontHomepage } from "@sweet-juniper/shared";
 import { StorefrontApplication } from "./StorefrontApplication";
 import { requestApi } from "./services/storefront-api";
+import { StarMark } from "./components/StarMark";
 
 const maxWaitMs = 120_000;
 const retryDelays = [1_000, 2_000, 5_000, 8_000];
@@ -153,9 +154,7 @@ function Introduction({
       </div>
       <section className="intro__content" aria-label="Welcome to Sweet Juniper Quilts">
         <a className="brand brand--light" href="/" aria-label="Sweet Juniper Quilts home">
-          <span className="brand__mark" aria-hidden="true">
-            ✳
-          </span>
+          <span className="brand__mark"><StarMark /></span>
           <span>Sweet Juniper Quilts</span>
         </a>
         <p className="eyebrow">HANDMADE WITH HEART</p>

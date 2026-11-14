@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useOwnerAuth } from "./owner-auth";
+import { StarMark } from "../components/StarMark";
 
 const ownerLinks = [
   { to: "/owner", label: "Overview", end: true },
@@ -32,7 +33,7 @@ export function OwnerDashboardLayout() {
     <div className="owner-shell">
       <aside className="owner-sidebar">
         <a className="owner-sidebar__brand" href="/">
-          <span className="brand__mark" aria-hidden="true">✳</span>
+          <span className="brand__mark"><StarMark /></span>
           <span>Sweet Juniper <small>OWNER STUDIO</small></span>
         </a>
         <nav aria-label="Owner navigation" className="owner-nav">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   AdminHomepageContent,
+  AdminHomepageMedia,
   AdminProduct,
 } from "@sweet-juniper/shared";
 import { requestAdminJson } from "../../services/admin-api";
@@ -49,8 +50,8 @@ function productPayload(product: AdminProduct, isFeatured: boolean) {
     name: product.name,
     description: product.description,
     price: product.price,
-    sku: product.sku,
     categoryId: product.categoryId,
+    subcategory: product.subcategory,
     inventoryQuantity: product.inventoryQuantity,
     lowInventoryThreshold: product.lowInventoryThreshold,
     fulfillmentType: product.fulfillmentType,
@@ -63,6 +64,7 @@ function productPayload(product: AdminProduct, isFeatured: boolean) {
 export function OwnerHomepagePage() {
   const content = useAdminResource<AdminHomepageContent[]>("/api/admin/homepage-content");
   const products = useAdminResource<AdminProduct[]>("/api/admin/products");
+  const homepageMedia = useAdminResource<AdminHomepageMedia[]>("/api/admin/homepage-media");
   const [draft, setDraft] = useState<HomepageDraft | null>(null);
   const [featuredIds, setFeaturedIds] = useState<string[]>([]);
   const [extraDrafts, setExtraDrafts] = useState<Record<string, { contentText: string; isPublished: boolean }>>({});
@@ -98,7 +100,11 @@ export function OwnerHomepagePage() {
     .flatMap((product) => product.media.map((media) => ({
       ...media,
       productName: product.name,
-    }))), [products.data]);
+    })))
+    .concat((homepageMedia.data || []).map((media) => ({
+      ...media,
+      productName: "Homepage library",
+    }))), [homepageMedia.data, products.data]);
 
   function updateSection(section: "home" | "about" | "contact", key: string, value: unknown) {
     setDraft((current) => {
@@ -244,17 +250,17 @@ export function OwnerHomepagePage() {
         <div><p className="eyebrow">CUSTOMIZE THE SHOP</p><h1>Homepage management</h1></div>
       </div>
       <p className="owner-help-note">
-        Changes are stored in Supabase and appear on the next storefront load. Upload photos and videos from a product, then select that Cloudinary media here.
+        Changes are stored in Supabase and appear on the next storefront load. Upload homepage-specific or product photos and videos from the Media area, then select them here.
       </p>
       {message && <p className="owner-success" role="status">{message}</p>}
       {error && <p className="owner-error" role="alert">{error}</p>}
-      {(content.error || products.error) && (
+      {(content.error || products.error || homepageMedia.error) && (
         <p className="owner-error" role="alert">
-          {content.error || products.error}
-          <button className="text-link" onClick={() => { content.reload(); products.reload(); }} type="button">Try again</button>
+          {content.error || products.error || homepageMedia.error}
+          <button className="text-link" onClick={() => { content.reload(); products.reload(); homepageMedia.reload(); }} type="button">Try again</button>
         </p>
       )}
-      {!draft || content.loading || products.loading ? <p className="owner-state" role="status">Loading homepage and product content…</p> : (
+      {!draft || content.loading || products.loading || homepageMedia.loading ? <p className="owner-state" role="status">Loading homepage and media content…</p> : (
         <>
           <section className="owner-panel owner-homepage-editor">
             <div className="owner-panel__heading"><h2>Introduction and featured media</h2><span className="owner-status">{draft.published.home ? "Published" : "Hidden"}</span></div>
@@ -268,7 +274,7 @@ export function OwnerHomepagePage() {
                   <option value="">Use the current fallback media</option>
                   {mediaOptions.map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</option>)}
                 </select>
-                <small>Only active media from published products is listed. Add media from Products first.</small>
+                <small>Product media from published products and homepage assets are available. Upload homepage assets from Media.</small>
               </label>
               <label><span>Image alt text</span><input maxLength={300} onChange={(event) => updateSection("home", "imageAlt", event.target.value)} value={asText(draft.home.imageAlt)} /></label>
             </div>
@@ -300,7 +306,7 @@ export function OwnerHomepagePage() {
                 {products.data.filter((product) => product.isPublished && !product.archivedAt).map((product) => (
                   <label className="owner-checkbox" key={product.id}>
                     <input checked={featuredIds.includes(product.id)} onChange={(event) => setFeaturedIds((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} type="checkbox" />
-                    {product.name} <small>{product.sku}</small>
+                    {product.name}
                   </label>
                 ))}
               </div>

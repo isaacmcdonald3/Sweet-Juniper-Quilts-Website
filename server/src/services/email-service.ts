@@ -93,7 +93,6 @@ function orderEmail(row: Record<string, unknown>): EmailOrder {
     trackingNumber: typeof row.tracking_number === "string" ? row.tracking_number : null,
     items: items.map((item: Record<string, unknown>) => ({
       name: String(item.product_name_snapshot),
-      sku: String(item.product_sku_snapshot),
       quantity: Number(item.quantity),
       unitPrice: Number(item.unit_price),
       lineTotal: Number(item.line_total),
@@ -130,7 +129,7 @@ export function createEmailService(
     if (email.related_order_id) {
       const { data, error } = await supabase
         .from("orders")
-        .select("order_number,customer_name,customer_email,shipping_address,subtotal,shipping_amount,total_amount,currency,shipping_carrier,tracking_number,order_items(product_name_snapshot,product_sku_snapshot,quantity,unit_price,line_total)")
+        .select("order_number,customer_name,customer_email,shipping_address,subtotal,shipping_amount,total_amount,currency,shipping_carrier,tracking_number,order_items(product_name_snapshot,quantity,unit_price,line_total)")
         .eq("id", email.related_order_id)
         .maybeSingle();
       if (error) throw error;

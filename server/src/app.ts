@@ -34,15 +34,15 @@ const adminProductSchema = z.object({
   name: z.string().trim().min(1).max(150),
   description: z.string().max(5000),
   price: z.number().finite().min(0).max(1_000_000),
-  sku: z.string().trim().min(1).max(64),
   categoryId: z.string().uuid().nullable(),
+  subcategory: z.string().trim().max(100).nullable(),
   inventoryQuantity: z.number().int().min(0).max(1_000_000),
   lowInventoryThreshold: z.number().int().min(0).max(1_000_000),
   fulfillmentType: z.enum(["ready_to_ship", "made_to_order"]),
   isPublished: z.boolean(),
   isFeatured: z.boolean(),
   isArchived: z.boolean(),
-});
+}).refine((product) => product.categoryId !== null || product.subcategory === null);
 
 const adminCategorySchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -67,6 +67,11 @@ const mediaUploadSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   altText: z.string().max(500).optional(),
   replaceMediaId: z.string().uuid().optional(),
+});
+
+const homepageMediaUploadSchema = z.object({
+  mediaType: z.enum(["image", "video"]),
+  altText: z.string().max(500).optional(),
 });
 
 const mediaUpdateSchema = z
@@ -436,6 +441,37 @@ export function createApp(services: AppServices) {
       next(error);
     }
   });
+
+  admin.get("/homepage-media", async (_request, response, next) => {
+    try {
+      response.json(await services.media.listHomepageMedia());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post(
+    "/homepage-media",
+    requireConfiguredCloudinary,
+    services.media.uploadMiddleware,
+    async (request, response, next) => {
+      const parsed = homepageMediaUploadSchema.safeParse(request.body);
+      if (!parsed.success || !request.file) {
+        response.status(400).json({ error: "Choose a supported image or video file and provide valid details." });
+        return;
+      }
+      try {
+        response.status(201).json(await services.media.uploadHomepageMedia(
+          getOwnerId(response),
+          request.file,
+          parsed.data.mediaType,
+          parsed.data.altText?.trim() || null,
+        ));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   admin.get("/products/:id/media", async (request, response, next) => {
     const parsedId = z.string().uuid().safeParse(request.params.id);
@@ -847,7 +883,7 @@ export function createApp(services: AppServices) {
           ? error.message
           : databaseCode === "23503"
             ? "This record is still in use and cannot be removed."
-            : "A record with the same name or SKU already exists.";
+            : "A record with the same name already exists.";
       response.status(409).json({ error: message });
       return;
     }

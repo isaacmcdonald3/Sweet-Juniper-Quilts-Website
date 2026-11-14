@@ -75,7 +75,7 @@ export function ProductDetailPage() {
                 : `${product.inventoryQuantity} ready to ship`}
           </p>
           <p className="product-detail__description">{product.description || "A one-of-a-kind piece, carefully made in our studio."}</p>
-          {product.sku && <p className="product-detail__sku">SKU: {product.sku}</p>}
+          {product.subcategory && <p className="product-detail__category">{product.subcategory}</p>}
           <div className="product-detail__fulfillment">
             {madeToOrder ? "Made to order with care" : "Ready to ship"}
           </div>

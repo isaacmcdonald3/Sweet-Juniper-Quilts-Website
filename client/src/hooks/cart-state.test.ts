@@ -9,7 +9,7 @@ const product: CatalogProduct = {
   slug: "meadow-quilt",
   description: "A hand-stitched quilt.",
   price: 125,
-  sku: "Q-1",
+  subcategory: null,
   categoryId: null,
   category: null,
   inventoryQuantity: 2,
