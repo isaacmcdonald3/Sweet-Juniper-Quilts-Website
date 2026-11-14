@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CatalogCategory,
   CatalogProduct,
+  CatalogProductMedia,
   ProductListFilters,
   StorefrontBootstrap,
   StorefrontHomepage,
 } from "@sweet-juniper/shared";
-import type { AdminHomepageMedia } from "@sweet-juniper/shared";
 import type { CloudinaryMediaClient } from "./cloudinary-service.js";
 
 const productSelection =
@@ -159,6 +159,7 @@ export function createStorefrontService(
       supabase
         .from("homepage_media")
         .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false }),
     ]);
 
@@ -185,7 +186,7 @@ export function createStorefrontService(
           cloudinary_public_id: string;
           media_url: string;
           alt_text: string | null;
-        }>).map((item): AdminHomepageMedia => ({
+        }>).map((item): CatalogProductMedia => ({
           id: item.id,
           cloudinaryAssetId: item.cloudinary_asset_id,
           mediaType: item.media_type,

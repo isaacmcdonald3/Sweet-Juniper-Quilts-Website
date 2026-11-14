@@ -101,7 +101,7 @@ export function OwnerHomepagePage() {
       ...media,
       productName: product.name,
     })))
-    .concat((homepageMedia.data || []).map((media) => ({
+    .concat((homepageMedia.data || []).filter((media) => !media.deletedAt).map((media) => ({
       ...media,
       productName: "Homepage library",
     }))), [homepageMedia.data, products.data]);

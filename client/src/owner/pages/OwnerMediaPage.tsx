@@ -66,6 +66,47 @@ export function OwnerMediaPage() {
     }
   }
 
+  async function deleteHomepageAsset(item: AdminHomepageMedia) {
+    if (!window.confirm("Delete this homepage asset? It will also be removed from Cloudinary.")) return;
+    setBusyId(item.id);
+    setError("");
+    setMessage("");
+    try {
+      const result = await requestAdminJson<{ cleanupPending: number }>(
+        `/api/admin/homepage-media/${item.id}`,
+        { method: "DELETE" },
+      );
+      setMessage(result.cleanupPending
+        ? "The asset was removed from the homepage. Cloudinary cleanup is pending; retry it below."
+        : "The homepage asset was deleted.");
+      homepageMedia.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The homepage asset could not be deleted.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function retryHomepageCleanup(item: AdminHomepageMedia) {
+    setBusyId(item.id);
+    setError("");
+    setMessage("");
+    try {
+      const result = await requestAdminJson<{ cleanupPending: number }>(
+        `/api/admin/homepage-media/${item.id}/retry-cleanup`,
+        { method: "POST" },
+      );
+      setMessage(result.cleanupPending
+        ? "Cloudinary cleanup is still pending for this homepage asset."
+        : "Homepage asset cleanup completed.");
+      homepageMedia.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Homepage asset cleanup could not be retried.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   return (
     <section className="owner-page">
       <div className="owner-page__heading">
@@ -98,15 +139,31 @@ export function OwnerMediaPage() {
         ) : homepageMedia.data?.length ? (
           <div className="owner-media-grid">
             {homepageMedia.data.map((item) => (
-              <article className="owner-media-card" key={item.id}>
-                {item.mediaType === "video"
-                  ? <video controls playsInline preload="metadata"><source src={item.url} /></video>
-                  : <img alt={item.altText || ""} loading="lazy" src={item.url} />}
+              <article className={`owner-media-card ${item.deletedAt ? "owner-media-card--removed" : ""}`} key={item.id}>
+                {item.deletedAt ? (
+                  <div className="owner-media-card__placeholder">Removed from homepage</div>
+                ) : item.mediaType === "video" ? (
+                  <video controls playsInline preload="metadata"><source src={item.url} /></video>
+                ) : (
+                  <img alt={item.altText || ""} loading="lazy" src={item.url} />
+                )}
                 <div className="owner-media-card__body">
                   <h3>Homepage asset</h3>
-                  <p className="owner-status">{item.mediaType}</p>
+                  <p className="owner-status">{item.deletedAt ? "Removed" : item.mediaType}</p>
                   {item.altText && <p>{item.altText}</p>}
                   <code>{item.cloudinaryAssetId}</code>
+                  {item.deletedAt ? (
+                    <div className="owner-cleanup-notice">
+                      <p>{item.cleanupPendingAssets.length ? "Cloudinary cleanup is pending." : "Removal is awaiting cleanup."}</p>
+                      <button className="text-link" disabled={busyId === item.id} onClick={() => void retryHomepageCleanup(item)} type="button">
+                        {busyId === item.id ? "Retrying…" : "Retry cleanup"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="text-link" disabled={busyId === item.id} onClick={() => void deleteHomepageAsset(item)} type="button">
+                      {busyId === item.id ? "Deleting…" : "Delete asset"}
+                    </button>
+                  )}
                 </div>
               </article>
             ))}

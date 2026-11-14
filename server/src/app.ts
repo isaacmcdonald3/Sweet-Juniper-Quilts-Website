@@ -473,6 +473,32 @@ export function createApp(services: AppServices) {
     },
   );
 
+  admin.delete("/homepage-media/:mediaId", async (request, response, next) => {
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!mediaId.success) {
+      response.status(400).json({ error: "Homepage media address is invalid." });
+      return;
+    }
+    try {
+      response.json(await services.media.removeHomepageMedia(getOwnerId(response), mediaId.data));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  admin.post("/homepage-media/:mediaId/retry-cleanup", async (request, response, next) => {
+    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+    if (!mediaId.success) {
+      response.status(400).json({ error: "Homepage media address is invalid." });
+      return;
+    }
+    try {
+      response.json(await services.media.retryHomepageMediaCleanup(getOwnerId(response), mediaId.data));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   admin.get("/products/:id/media", async (request, response, next) => {
     const parsedId = z.string().uuid().safeParse(request.params.id);
     if (!parsedId.success) {

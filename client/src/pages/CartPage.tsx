@@ -43,7 +43,7 @@ export function CartPage() {
               return (
                 <article className="cart-item" key={product.id}>
                   <Link to={`/products/${encodeURIComponent(product.slug)}`}>
-                    <img src={image?.url || "/images/intro/juniper-star.svg"} alt={image?.altText || product.name} />
+                    <img src={image?.url || "/images/intro/chair-quilt.jpg"} alt={image?.altText || product.name} />
                   </Link>
                   <div className="cart-item__details">
                     <h2><Link to={`/products/${encodeURIComponent(product.slug)}`}>{product.name}</Link></h2>

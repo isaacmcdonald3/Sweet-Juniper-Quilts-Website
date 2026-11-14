@@ -16,7 +16,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       <Link className="product-card__image-link" to={`/products/${encodeURIComponent(product.slug)}`}>
         <img
           className="product-card__image"
-          src={image?.url || "/images/intro/juniper-star.svg"}
+          src={image?.url || "/images/intro/chair-quilt.jpg"}
           alt={image?.altText || product.name}
           loading="lazy"
         />

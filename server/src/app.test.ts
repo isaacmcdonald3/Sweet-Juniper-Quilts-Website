@@ -183,6 +183,7 @@ test("contact form validates submissions and email logs remain owner-only", asyn
 test("media endpoints are owner-only and report when Cloudinary is not configured", async () => {
   await request(app).get("/api/admin/media/limits").expect(401);
   await request(app).get("/api/admin/homepage-media").expect(401);
+  await request(app).delete("/api/admin/homepage-media/invalid-id").expect(401);
   await request(app)
     .get("/api/admin/media/limits")
     .set("Authorization", "Bearer customer-token")
@@ -212,6 +213,10 @@ test("media endpoints are owner-only and report when Cloudinary is not configure
     .set("Authorization", "Bearer owner-token")
     .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
     .expect(503, { error: "Media uploads are not configured yet." });
+  await request(app)
+    .delete("/api/admin/homepage-media/invalid-id")
+    .set("Authorization", "Bearer owner-token")
+    .expect(400, { error: "Homepage media address is invalid." });
 });
 
 test("owner API preflight permits authenticated administrative methods", async () => {

@@ -57,32 +57,37 @@ a {
 
 .intro__photo {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  right: clamp(30px, 8vw, 130px);
+  width: min(34vw, 440px);
+  aspect-ratio: 4 / 5;
+  border: 9px solid #fffaf1;
+  box-shadow: 0 24px 70px rgb(15 25 18 / 32%);
   background-position: center;
   background-size: cover;
   opacity: 0;
   animation: quilt-fade 24s infinite;
-  transform: scale(1.035);
+  transform: translateY(-50%) rotate(-3deg);
 }
 
 .intro__photo--one {
-  background-image: url("/images/intro/juniper-star.svg");
+  background-image: url("/images/intro/chair-quilt.jpg");
   animation-delay: -2.4s;
 }
 
 .intro__photo--two {
-  background-image: url("/images/intro/kinusaiga-garden.svg");
+  background-image: url("/images/intro/red-sew.jpg");
   animation-delay: 8s;
 }
 
 .intro__photo--three {
-  background-image: url("/images/intro/meadow-quilt.svg");
+  background-image: url("/images/intro/yellow-stitching.jpg");
   animation-delay: 16s;
 }
 
 .intro__shade {
-  background: linear-gradient(90deg, rgb(29 44 36 / 83%) 0%, rgb(31 47 38 / 62%) 46%, rgb(31 47 38 / 8%) 100%),
-    linear-gradient(0deg, rgb(28 39 33 / 25%), transparent 48%);
+  background: linear-gradient(90deg, #344a3c 0%, rgb(52 74 60 / 96%) 45%, rgb(52 74 60 / 22%) 100%),
+    linear-gradient(0deg, rgb(28 39 33 / 28%), transparent 48%);
 }
 
 .intro__content {
@@ -421,13 +426,19 @@ a {
     margin: 0 auto;
   }
 
+  .intro__photo {
+    right: 5vw;
+    width: min(28vw, 170px);
+    border-width: 6px;
+  }
+
   .intro__content .eyebrow {
     margin-top: 54px;
   }
 
   .intro__shade {
-    background: linear-gradient(90deg, rgb(29 44 36 / 80%), rgb(31 47 38 / 38%)),
-      linear-gradient(0deg, rgb(28 39 33 / 36%), transparent 55%);
+    background: linear-gradient(90deg, rgb(52 74 60 / 94%), rgb(52 74 60 / 60%)),
+      linear-gradient(0deg, rgb(28 39 33 / 42%), transparent 55%);
   }
 
   .intro__caption {
@@ -798,7 +809,7 @@ a {
 
 .home-about__art {
   min-height: 420px;
-  background: url("/images/intro/meadow-quilt.svg") center / cover no-repeat;
+  background: url("/images/intro/yellow-stitching.jpg") center / cover no-repeat;
 }
 
 .home-about__copy {

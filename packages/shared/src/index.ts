@@ -82,7 +82,13 @@ export interface AdminProductMedia extends CatalogProductMedia {
   >;
 }
 
-export type AdminHomepageMedia = CatalogProductMedia;
+export interface AdminHomepageMedia extends CatalogProductMedia {
+  deletedAt: string | null;
+  cleanupPendingAssets: Array<
+    | { publicId: string; resourceType: "image" | "video" }
+    | { assetId: string; resourceType: "image" | "video" }
+  >;
+}
 
 export interface CloudinaryUploadLimits {
   configured: boolean;

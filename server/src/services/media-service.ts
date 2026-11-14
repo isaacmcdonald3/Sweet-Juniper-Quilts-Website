@@ -43,6 +43,8 @@ interface HomepageMediaRow {
   media_url: string;
   alt_text: string | null;
   created_at: string;
+  deleted_at: string | null;
+  cleanup_pending_assets: PendingAsset[] | null;
 }
 
 interface UploadFile {
@@ -108,6 +110,8 @@ function mapHomepageMedia(row: HomepageMediaRow, cloudinary: CloudinaryMediaClie
     posterUrl: null,
     isPrimary: false,
     sortOrder: 0,
+    deletedAt: row.deleted_at,
+    cleanupPendingAssets: getPendingAssets(row.cleanup_pending_assets),
   };
 }
 
@@ -356,11 +360,50 @@ export function createMediaService(
   async function listHomepageMedia(): Promise<AdminHomepageMedia[]> {
     const { data, error } = await supabase
       .from("homepage_media")
-      .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at")
+      .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at,deleted_at,cleanup_pending_assets")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (error) throw error;
     return (data as HomepageMediaRow[]).map((row) => mapHomepageMedia(row, cloudinary));
+  }
+
+  async function cleanupHomepageMedia(row: HomepageMediaRow): Promise<number> {
+    const pending = getPendingAssets(row.cleanup_pending_assets);
+    const remaining: PendingAsset[] = [];
+    for (const asset of pending) {
+      try {
+        if ("publicId" in asset) {
+          await cloudinary.delete(asset.publicId, asset.resourceType);
+        } else {
+          await cloudinary.deleteByAssetId(asset.assetId, asset.resourceType);
+        }
+      } catch (error) {
+        logger.error(
+          {
+            err: error,
+            mediaId: row.id,
+            ...("publicId" in asset ? { publicId: asset.publicId } : { assetId: asset.assetId }),
+          },
+          "Homepage Cloudinary asset cleanup remains pending",
+        );
+        remaining.push(asset);
+      }
+    }
+
+    if (remaining.length > 0) {
+      if (remaining.length !== pending.length) {
+        const { error } = await supabase
+          .from("homepage_media")
+          .update({ cleanup_pending_assets: remaining })
+          .eq("id", row.id);
+        if (error) throw error;
+      }
+      return remaining.length;
+    }
+
+    const { error } = await supabase.from("homepage_media").delete().eq("id", row.id);
+    if (error) throw error;
+    return 0;
   }
 
   async function uploadHomepageMedia(
@@ -395,7 +438,7 @@ export function createMediaService(
           media_url: uploaded.secureUrl,
           alt_text: altText,
         })
-        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at")
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at,deleted_at,cleanup_pending_assets")
         .single();
       if (error) throw error;
       row = data as HomepageMediaRow;
@@ -406,6 +449,66 @@ export function createMediaService(
 
     await audit(actorId, "homepage_media.uploaded", row.id, { mediaType }, "homepage_media");
     return mapHomepageMedia(row, cloudinary);
+  }
+
+  async function removeHomepageMedia(actorId: string, mediaId: string): Promise<{ cleanupPending: number }> {
+    const selection = "id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at,deleted_at,cleanup_pending_assets";
+    const { data, error } = await supabase
+      .from("homepage_media")
+      .select(selection)
+      .eq("id", mediaId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new MediaNotFoundError("Homepage media not found.");
+    let row = data as HomepageMediaRow;
+
+    if (!row.deleted_at) {
+      const { data: content, error: contentError } = await supabase
+        .from("homepage_content")
+        .select("content");
+      if (contentError) throw contentError;
+      const references = new Set([row.id, row.cloudinary_asset_id, row.cloudinary_public_id]);
+      if (contentContainsReference(content, references)) {
+        throw new MediaConflictError("This media is selected on the homepage. Choose another before deleting it.");
+      }
+
+      const assets: PendingAsset[] = [
+        ...getPendingAssets(row.cleanup_pending_assets),
+        { publicId: row.cloudinary_public_id, resourceType: row.media_type },
+      ];
+      const { data: removed, error: updateError } = await supabase
+        .from("homepage_media")
+        .update({
+          deleted_at: new Date().toISOString(),
+          cleanup_pending_assets: assets,
+        })
+        .eq("id", mediaId)
+        .select(selection)
+        .single();
+      if (updateError) throw updateError;
+      row = removed as HomepageMediaRow;
+      await audit(actorId, "homepage_media.removed", mediaId, {}, "homepage_media");
+    }
+
+    return { cleanupPending: await cleanupHomepageMedia(row) };
+  }
+
+  async function retryHomepageMediaCleanup(actorId: string, mediaId: string): Promise<{ cleanupPending: number }> {
+    const selection = "id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,created_at,deleted_at,cleanup_pending_assets";
+    const { data, error } = await supabase
+      .from("homepage_media")
+      .select(selection)
+      .eq("id", mediaId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new MediaNotFoundError("Homepage media not found.");
+    const row = data as HomepageMediaRow;
+    if (!row.deleted_at) {
+      throw new MediaConflictError("Homepage media cleanup can only be retried after the asset is removed.");
+    }
+    const cleanupPending = await cleanupHomepageMedia(row);
+    await audit(actorId, "homepage_media.cleanup_retried", mediaId, { cleanupPending }, "homepage_media");
+    return { cleanupPending };
   }
 
   async function updateProductMedia(
@@ -648,6 +751,8 @@ export function createMediaService(
     listAllMedia,
     listHomepageMedia,
     uploadHomepageMedia,
+    removeHomepageMedia,
+    retryHomepageMediaCleanup,
     updateProductMedia,
     removeProductMedia,
     setVideoPoster,

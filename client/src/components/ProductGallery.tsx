@@ -21,7 +21,7 @@ export function ProductGallery({
           </video>
         ) : (
           <img
-            src={selected?.url || "/images/intro/juniper-star.svg"}
+            src={selected?.url || "/images/intro/chair-quilt.jpg"}
             alt={selected?.altText || productName}
           />
         )}

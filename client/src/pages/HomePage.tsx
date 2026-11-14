@@ -65,10 +65,10 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
     : selectedHero ? "" : getContentText(home, "videoUrl", "");
   const heroImageUrl = selectedHero?.mediaType === "image"
     ? selectedHero.url
-    : getContentText(home, "imageUrl", firstFeaturedImage?.url || "/images/intro/kinusaiga-garden.svg");
+    : getContentText(home, "imageUrl", firstFeaturedImage?.url || "/images/intro/chair-quilt.jpg");
   const aboutImageUrl = selectedAbout?.mediaType === "image"
     ? selectedAbout.url
-    : getContentText(about, "imageUrl", "/images/intro/meadow-quilt.svg");
+    : getContentText(about, "imageUrl", "/images/intro/yellow-stitching.jpg");
   const posterUrl = selectedHero?.posterUrl || firstFeaturedImage?.url;
   const visible = (key: string) =>
     sectionVisibility[key] !== false && data.publishedSections?.[key] !== false;
