@@ -47,7 +47,7 @@ export function OwnerDashboardHome() {
               ) : <p className="owner-empty">Orders will appear here when customers place them.</p>}
             </section>
           </div>
-          <p className="owner-help-note">Sales totals are intentionally omitted until verified payment processing is available.</p>
+          <p className="owner-help-note">Shipping is a flat rate per order. Packages are shipping via USPS and estimated to arrive within 2-5 business days. International shipping is not available.</p>
         </>
       ) : null}
     </section>

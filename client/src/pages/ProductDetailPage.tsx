@@ -88,7 +88,7 @@ export function ProductDetailPage() {
                 ? "Currently unavailable"
                 : `${product.inventoryQuantity} ready to ship`}
           </p>
-          <p className="product-detail__description">{product.description || "A one-of-a-kind piece, carefully made in our studio."}</p>
+          <p className="product-detail__description">{product.description || "A one-of-a-kind piece, carefully made in the studio."}</p>
           <div className="product-detail__purchase">
             <label>
               Quantity

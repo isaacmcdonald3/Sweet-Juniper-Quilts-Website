@@ -74,7 +74,7 @@ export function CartPage() {
             <div><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></div>
             <div><span>Shipping</span><strong>{shippingAmount === null ? "Confirmed at checkout" : formatPrice(shippingAmount)}</strong></div>
             {shippingAmount !== null && <div><span>Estimated total</span><strong>{formatPrice(subtotal + shippingAmount)}</strong></div>}
-            <p>Estimate only. Live prices and stock are checked on the server before you approve payment. Shipping is a flat rate per order.</p>
+            <p>Shipping is a flat rate per order.</p>
             <Link className="button button--primary" to="/checkout">Continue to checkout</Link>
             <Link className="text-link" to="/catalog">Continue exploring</Link>
           </aside>

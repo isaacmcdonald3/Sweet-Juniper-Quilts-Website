@@ -160,7 +160,7 @@ function Introduction({
         <p className="eyebrow">HANDMADE WITH HEART</p>
         <h1>A little warmth, stitched to last.</h1>
         <p className="intro__welcome">
-          Welcome to Sweet Juniper Quilts, where thoughtful quilts and kinusaiga art bring
+          Welcome to Sweet Juniper Quilts, where thoughtfully made quilts bring
           color, comfort, and a little joy to everyday life.
         </p>
         <div className="intro__status" role="status" aria-live="polite">

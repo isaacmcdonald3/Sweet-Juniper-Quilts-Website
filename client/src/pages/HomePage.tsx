@@ -47,7 +47,7 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
     getContentText(
       welcome,
       "body",
-      "Handmade quilts and kinusaiga art, thoughtfully made to bring color and comfort to everyday life.",
+      "Handmade quilts thoughtfully made to bring color and comfort to everyday life.",
     ),
   );
   const aboutTitle = getContentText(about, "title", "Made slowly, with a story in every stitch.");
