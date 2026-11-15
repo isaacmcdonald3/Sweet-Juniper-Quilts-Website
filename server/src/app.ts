@@ -233,7 +233,7 @@ export function createApp(services: AppServices) {
         city: z.string().trim().min(1).max(100),
         region: z.string().trim().min(1).max(100),
         postalCode: z.string().trim().min(1).max(24),
-        country: z.string().trim().regex(/^[A-Za-z]{2}$/).transform((value) => value.toUpperCase()),
+        country: z.literal("US"),
       }),
     }),
     items: checkoutItemsSchema,

@@ -37,6 +37,24 @@ interface ShippingDetails {
   country: string;
 }
 
+const usStates = [
+  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"],
+  ["CA", "California"], ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"],
+  ["DC", "District of Columbia"], ["FL", "Florida"], ["GA", "Georgia"], ["HI", "Hawaii"],
+  ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"],
+  ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"],
+  ["MD", "Maryland"], ["MA", "Massachusetts"], ["MI", "Michigan"], ["MN", "Minnesota"],
+  ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"],
+  ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"],
+  ["NY", "New York"], ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"],
+  ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"], ["RI", "Rhode Island"],
+  ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"],
+  ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"],
+  ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
+  ["AS", "American Samoa"], ["GU", "Guam"], ["MP", "Northern Mariana Islands"],
+  ["PR", "Puerto Rico"], ["VI", "U.S. Virgin Islands"],
+] as const;
+
 const shippingDetailsKey = "sjq-checkout-shipping-details";
 const emptyShippingDetails: ShippingDetails = {
   name: "",
@@ -65,7 +83,13 @@ function isShippingDetails(value: unknown): value is ShippingDetails {
 }
 
 function readShippingDetails(): ShippingDetails {
-  const stored = sessionStorage.getItem(shippingDetailsKey);
+  let stored: string | null;
+  try {
+    stored = sessionStorage.getItem(shippingDetailsKey);
+  } catch (cause) {
+    console.error("Checkout details could not be read from this tab.", cause);
+    return emptyShippingDetails;
+  }
   if (!stored) return emptyShippingDetails;
   let parsed: unknown;
   try {
@@ -73,7 +97,12 @@ function readShippingDetails(): ShippingDetails {
   } catch (cause) {
     console.error("Checkout details stored in this tab are invalid.", cause);
   }
-  if (isShippingDetails(parsed)) return parsed;
+  if (isShippingDetails(parsed)) {
+    const region = usStates.find(([code, name]) =>
+      code === parsed.region.toUpperCase() || name.toLocaleLowerCase() === parsed.region.toLocaleLowerCase(),
+    )?.[0] || "";
+    return { ...parsed, region, country: "US" };
+  }
   try {
     sessionStorage.removeItem(shippingDetailsKey);
   } catch (cause) {
@@ -148,7 +177,7 @@ export function CheckoutPage() {
   const [captureNeedsRetry, setCaptureNeedsRetry] = useState(false);
   const [shippingDetails, setShippingDetails] = useState(readShippingDetails);
 
-  function updateShippingDetails(event: ChangeEvent<HTMLInputElement>) {
+  function updateShippingDetails(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const next = { ...shippingDetails, [event.currentTarget.name]: event.currentTarget.value };
     setShippingDetails(next);
     try {
@@ -316,9 +345,9 @@ export function CheckoutPage() {
           <label className="checkout-form__wide"><span>Street address</span><input autoComplete="address-line1" maxLength={150} name="addressLine1" onChange={updateShippingDetails} required value={shippingDetails.addressLine1} /></label>
           <label className="checkout-form__wide"><span>Apartment, suite, etc. (optional)</span><input autoComplete="address-line2" maxLength={150} name="addressLine2" onChange={updateShippingDetails} value={shippingDetails.addressLine2} /></label>
           <label><span>City</span><input autoComplete="address-level2" maxLength={100} name="city" onChange={updateShippingDetails} required value={shippingDetails.city} /></label>
-          <label><span>State / region</span><input autoComplete="address-level1" maxLength={100} name="region" onChange={updateShippingDetails} required value={shippingDetails.region} /></label>
+          <label><span>State / territory</span><select autoComplete="address-level1" name="region" onChange={updateShippingDetails} required value={shippingDetails.region}><option value="">Select a state or territory</option>{usStates.map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label>
           <label><span>Postal code</span><input autoComplete="postal-code" maxLength={24} name="postalCode" onChange={updateShippingDetails} required value={shippingDetails.postalCode} /></label>
-          <label><span>Country code</span><input autoComplete="country" maxLength={2} name="country" onChange={updateShippingDetails} required value={shippingDetails.country} /></label>
+          <label><span>Country</span><select autoComplete="country" name="country" onChange={updateShippingDetails} required value={shippingDetails.country}><option value="US">United States</option></select></label>
           <div className="checkout-form__wide checkout-review">
             <h2>Items in your bag</h2>
             <ul>{items.map(({ product, quantity }) => (

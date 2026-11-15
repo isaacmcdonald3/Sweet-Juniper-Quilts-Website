@@ -60,6 +60,12 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
   const selectedHero = mediaById(data, getContentText(home, "heroMediaId", ""));
   const selectedAbout = mediaById(data, getContentText(about, "mediaId", ""));
   const selectedPromotion = mediaById(data, getContentText(promotion, "mediaId", ""));
+  const galleryMediaIds = Array.isArray(home.galleryMediaIds)
+    ? home.galleryMediaIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const galleryMedia = galleryMediaIds
+    .map((id) => mediaById(data, id))
+    .filter((media): media is CatalogProductMedia => Boolean(media));
   const firstFeaturedImage = data.featuredProducts.flatMap((product) => product.media)
     .find((item) => item.mediaType === "image");
   const heroVideoUrl = selectedHero?.mediaType === "video"
@@ -78,10 +84,15 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
       home.sectionOrder.every((key) => typeof key === "string")
     ? home.sectionOrder as string[]
     : defaultSectionOrder;
+  const sectionKeys = [...defaultSectionOrder.slice(0, 2), "gallery", ...defaultSectionOrder.slice(2)];
   const sectionOrder = [...new Set([
-    ...storedOrder.filter((key) => defaultSectionOrder.includes(key)),
-    ...defaultSectionOrder,
+    ...storedOrder.filter((key) => sectionKeys.includes(key)),
+    ...sectionKeys,
   ])];
+  if (!storedOrder.includes("gallery")) {
+    const aboutIndex = sectionOrder.indexOf("about");
+    sectionOrder.splice(aboutIndex < 0 ? sectionOrder.length : aboutIndex, 0, "gallery");
+  }
   const promotionTitle = getContentText(promotion, "title", "");
   const promotionBody = getContentText(promotion, "body", "");
   const promotionUrl = safePromotionUrl(getContentText(promotion, "buttonUrl", "/catalog"));
@@ -144,6 +155,29 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
         )}
       </section>
     ),
+    gallery: galleryMedia.length ? (
+      <section className="home-gallery section-wrap" aria-labelledby="gallery-title" key="gallery">
+        <div className="section-heading">
+          <p className="eyebrow">{getContentText(home, "galleryEyebrow", "A CLOSER LOOK")}</p>
+          <h2 id="gallery-title">{getContentText(home, "galleryTitle", "Around the studio")}</h2>
+        </div>
+        <div className="home-gallery__grid">
+          {galleryMedia.map((media) => (
+            <figure className="home-gallery__item" key={media.id}>
+              {media.mediaType === "video" ? (
+                <video controls playsInline poster={media.posterUrl || undefined} preload="metadata">
+                  <source src={media.url} />
+                  Your browser does not support video playback.
+                </video>
+              ) : (
+                <img alt={media.altText || ""} loading="lazy" src={media.url} />
+              )}
+              {media.altText && <figcaption>{media.altText}</figcaption>}
+            </figure>
+          ))}
+        </div>
+      </section>
+    ) : null,
     featured: (
       <section className="home-featured section-wrap" aria-labelledby="featured-title" key="featured">
         <div className="section-heading section-heading--row">
@@ -243,7 +277,7 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
                 alt={getContentText(home, "imageAlt", "Colorful handmade fabric artwork")}
               />
             )}
-            <span className="home-hero__caption">A little joy, made by hand</span>
+            <span className="home-hero__caption"></span>
           </div>
         </section>
       )}

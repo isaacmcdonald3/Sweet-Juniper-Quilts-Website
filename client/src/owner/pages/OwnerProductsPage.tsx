@@ -112,7 +112,7 @@ export function OwnerProductsPage() {
         <div><p className="eyebrow">YOUR COLLECTION</p><h1>Products</h1></div>
         <button className="button button--primary" onClick={() => { setError(""); setEditing({ id: null, fields: fieldsFromProduct() }); }} type="button">Add product</button>
       </div>
-      <p className="owner-help-note">Made-to-order items are kept off the online shop. Invite customers to email sweetjuniperquilts@gmail.com for custom crafts.</p>
+      <p className="owner-help-note">Made-to-order items are kept off the online shop. Invite customers to email sweetjuniperquilts@gmail.com for custom crafts. Archive products instead of deleting them to preserve order history and avoid orphaning their Cloudinary media; archived products are hidden from the shop and can be restored.</p>
       {message && <p className="owner-success" role="status">{message}</p>}
       {error && <p className="owner-error" role="alert">{error}</p>}
       {loadError && <p className="owner-error" role="alert">{loadError} <button className="text-link" onClick={() => { products.reload(); categories.reload(); }} type="button">Try again</button></p>}

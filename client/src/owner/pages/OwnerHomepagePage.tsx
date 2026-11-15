@@ -15,11 +15,12 @@ type HomepageDraft = {
   published: Record<string, boolean>;
 };
 
-const editableSections = ["categories", "featured", "about", "promotion", "contact"];
+const editableSections = ["categories", "featured", "gallery", "about", "promotion", "contact"];
 const defaultSectionOrder = [...editableSections];
 const sectionLabels: Record<string, string> = {
   categories: "Categories",
   featured: "Featured products",
+  gallery: "Gallery",
   about: "Our story",
   promotion: "Promotion",
   contact: "Contact",
@@ -96,7 +97,7 @@ export function OwnerHomepagePage() {
   }, [products.data]);
 
   const mediaOptions = useMemo(() => (products.data || [])
-    .filter((product) => product.isPublished && !product.archivedAt)
+    .filter((product) => product.isPublished && !product.archivedAt && product.fulfillmentType === "ready_to_ship")
     .flatMap((product) => product.media.map((media) => ({
       ...media,
       productName: product.name,
@@ -123,6 +124,17 @@ export function OwnerHomepagePage() {
     updateSection("home", "promotionalContent", promotion);
   }
 
+  function toggleGalleryMedia(mediaId: string, selected: boolean) {
+    setDraft((current) => {
+      if (!current) return current;
+      const selectedIds = asStringArray(current.home.galleryMediaIds, []);
+      let galleryMediaIds = selectedIds;
+      if (selected && !selectedIds.includes(mediaId)) galleryMediaIds = [...selectedIds, mediaId];
+      else if (!selected) galleryMediaIds = selectedIds.filter((id) => id !== mediaId);
+      return { ...current, home: { ...current.home, galleryMediaIds } };
+    });
+  }
+
   function getSectionVisibility(): Record<string, boolean> {
     const stored = asObject(draft?.home.sectionVisibility);
     return Object.fromEntries(editableSections.map((section) => [section, stored[section] !== false]));
@@ -130,7 +142,12 @@ export function OwnerHomepagePage() {
 
   function sectionOrder(): string[] {
     const stored = asStringArray(draft?.home.sectionOrder, defaultSectionOrder);
-    return [...new Set([...stored.filter((section) => editableSections.includes(section)), ...defaultSectionOrder])];
+    const order = [...new Set([...stored.filter((section) => editableSections.includes(section)), ...defaultSectionOrder])];
+    if (!stored.includes("gallery")) {
+      const aboutIndex = order.indexOf("about");
+      order.splice(aboutIndex < 0 ? order.length : aboutIndex, 0, "gallery");
+    }
+    return order;
   }
 
   async function saveSection(key: "home" | "about" | "contact") {
@@ -274,7 +291,7 @@ export function OwnerHomepagePage() {
         <div><p className="eyebrow">CUSTOMIZE THE SHOP</p><h1>Homepage management</h1></div>
       </div>
       <p className="owner-help-note">
-        Changes are stored in Supabase and appear on the next storefront load. Upload homepage-specific or product photos and videos from the Media area, then select them here.
+        Changes are stored in Supabase and appear on the next storefront load. Upload homepage-specific or product photos and videos from the Media area, then select them here. The gallery can use both independent homepage assets and product media.
       </p>
       {message && <p className="owner-success" role="status">{message}</p>}
       {error && <p className="owner-error" role="alert">{error}</p>}
@@ -341,6 +358,33 @@ export function OwnerHomepagePage() {
               </div>
             ) : <p className="owner-empty-card">Publish products to choose homepage features.</p>}
             <button className="button button--primary" disabled={Boolean(busy)} onClick={() => void saveFeaturedProducts()} type="button">{busy === "featured" ? "Saving…" : "Save featured products"}</button>
+          </section>
+
+          <section className="owner-panel owner-homepage-editor">
+            <div className="owner-panel__heading"><h2>Gallery</h2></div>
+            <div className="owner-form-grid">
+              <label><span>Eyebrow</span><input maxLength={100} onChange={(event) => updateSection("home", "galleryEyebrow", event.target.value)} value={asText(draft.home.galleryEyebrow, "A CLOSER LOOK")} /></label>
+              <label><span>Heading</span><input maxLength={180} onChange={(event) => updateSection("home", "galleryTitle", event.target.value)} value={asText(draft.home.galleryTitle, "Around the studio")} /></label>
+            </div>
+            {mediaOptions.length ? (
+              <div className="owner-gallery-options">
+                {mediaOptions.map((item) => (
+                  <label className="owner-gallery-option" key={item.id}>
+                    <input
+                      checked={asStringArray(draft.home.galleryMediaIds, []).includes(item.id)}
+                      onChange={(event) => toggleGalleryMedia(item.id, event.target.checked)}
+                      type="checkbox"
+                    />
+                    {item.mediaType === "video"
+                      ? <video muted playsInline preload="metadata"><source src={item.url} /></video>
+                      : <img alt={item.altText || ""} loading="lazy" src={item.url} />}
+                    <span>{item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</span>
+                  </label>
+                ))}
+              </div>
+            ) : <p className="owner-empty-card">Upload homepage or product media before selecting gallery items.</p>}
+            <p className="owner-help-note">Select the photos and videos to show in the gallery, then save the homepage section.</p>
+            <button className="button button--primary" disabled={Boolean(busy)} onClick={() => void saveSection("home")} type="button">{busy === "home" ? "Saving…" : "Save gallery"}</button>
           </section>
 
           <section className="owner-panel owner-homepage-editor">
