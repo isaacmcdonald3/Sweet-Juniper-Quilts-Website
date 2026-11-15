@@ -42,13 +42,15 @@ export function CartPage() {
               const image = product.media.find((item) => item.mediaType === "image");
               return (
                 <article className="cart-item" key={product.id}>
-                  <Link to={`/products/${encodeURIComponent(product.slug)}`}>
+                  <Link className="cart-item__image" to={`/products/${encodeURIComponent(product.slug)}`}>
                     <img src={image?.url || "/images/intro/chair-quilt.jpg"} alt={image?.altText || product.name} />
                   </Link>
                   <div className="cart-item__details">
                     <h2><Link to={`/products/${encodeURIComponent(product.slug)}`}>{product.name}</Link></h2>
-                    <p>{product.fulfillmentType === "made_to_order" ? "Made to order" : "Ready to ship"}</p>
                     <button className="text-link" onClick={() => removeItem(product.id)} type="button">Remove</button>
+                  </div>
+                  <div className="cart-item__unit-price">
+                    <span>{formatPrice(product.price)} <span>each</span></span>
                   </div>
                   <label className="cart-item__quantity">
                     <span>Quantity</span>
@@ -61,8 +63,7 @@ export function CartPage() {
                       onChange={(event) => setQuantity(product.id, Number(event.target.value))}
                     />
                   </label>
-                  <div className="cart-item__price">
-                    <span>{formatPrice(product.price)} each</span>
+                  <div className="cart-item__line-total">
                     <strong>{formatPrice(product.price * quantity)}</strong>
                   </div>
                 </article>

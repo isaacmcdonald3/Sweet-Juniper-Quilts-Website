@@ -4,6 +4,7 @@ import type { CatalogProductMedia, StorefrontHomepage } from "@sweet-juniper/sha
 import { ProductCard } from "../components/ProductCard";
 import { requestApi } from "../services/storefront-api";
 import { getContentSection, getContentText } from "../utils/homepage-content";
+import { galleryMediaIds, galleryOrder } from "../utils/homepage-gallery";
 import { StarMark } from "../components/StarMark";
 
 const defaultSectionOrder = ["categories", "featured", "about", "promotion", "contact"];
@@ -60,12 +61,11 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
   const selectedHero = mediaById(data, getContentText(home, "heroMediaId", ""));
   const selectedAbout = mediaById(data, getContentText(about, "mediaId", ""));
   const selectedPromotion = mediaById(data, getContentText(promotion, "mediaId", ""));
-  const galleryMediaIds = Array.isArray(home.galleryMediaIds)
-    ? home.galleryMediaIds.filter((id): id is string => typeof id === "string")
-    : [];
-  const galleryMedia = galleryMediaIds
+  const selectedGalleryIds = galleryMediaIds(home.galleryMediaIds);
+  const galleryMedia = galleryOrder(home, "galleryDesktopOrder", selectedGalleryIds)
     .map((id) => mediaById(data, id))
     .filter((media): media is CatalogProductMedia => Boolean(media));
+  const galleryPreview = galleryMedia.slice(0, 5);
   const firstFeaturedImage = data.featuredProducts.flatMap((product) => product.media)
     .find((item) => item.mediaType === "image");
   const heroVideoUrl = selectedHero?.mediaType === "video"
@@ -157,24 +157,43 @@ export function HomePage({ data }: { data: StorefrontHomepage }) {
     ),
     gallery: galleryMedia.length ? (
       <section className="home-gallery section-wrap" aria-labelledby="gallery-title" key="gallery">
-        <div className="section-heading">
-          <p className="eyebrow">{getContentText(home, "galleryEyebrow", "A CLOSER LOOK")}</p>
-          <h2 id="gallery-title">{getContentText(home, "galleryTitle", "Around the studio")}</h2>
+        <div className="section-heading section-heading--row">
+          <div>
+            <p className="eyebrow">{getContentText(home, "galleryEyebrow", "A CLOSER LOOK")}</p>
+            <h2 id="gallery-title">{getContentText(home, "galleryTitle", "Around the studio")}</h2>
+          </div>
+          <Link className="text-link" to="/gallery">View the full gallery <span aria-hidden="true">→</span></Link>
         </div>
-        <div className="home-gallery__grid">
-          {galleryMedia.map((media) => (
-            <figure className="home-gallery__item" key={media.id}>
-              {media.mediaType === "video" ? (
-                <video controls playsInline poster={media.posterUrl || undefined} preload="metadata">
-                  <source src={media.url} />
+        {getContentText(home, "galleryDescription", "") && (
+          <p className="home-gallery__description">{getContentText(home, "galleryDescription", "")}</p>
+        )}
+        <div className="home-gallery__layout">
+          {galleryPreview[0] && (
+            <figure className="home-gallery__lead">
+              {galleryPreview[0].mediaType === "video" ? (
+                <video controls playsInline poster={galleryPreview[0].posterUrl || undefined} preload="metadata">
+                  <source src={galleryPreview[0].url} />
                   Your browser does not support video playback.
                 </video>
               ) : (
-                <img alt={media.altText || ""} loading="lazy" src={media.url} />
+                <img alt={galleryPreview[0].altText || ""} loading="lazy" src={galleryPreview[0].url} />
               )}
-              {media.altText && <figcaption>{media.altText}</figcaption>}
             </figure>
-          ))}
+          )}
+          <div className="home-gallery__mosaic">
+            {galleryPreview.slice(1).map((media) => (
+              <figure className="home-gallery__tile" key={media.id}>
+                {media.mediaType === "video" ? (
+                  <video controls playsInline poster={media.posterUrl || undefined} preload="metadata">
+                    <source src={media.url} />
+                    Your browser does not support video playback.
+                  </video>
+                ) : (
+                  <img alt={media.altText || ""} loading="lazy" src={media.url} />
+                )}
+              </figure>
+            ))}
+          </div>
         </div>
       </section>
     ) : null,

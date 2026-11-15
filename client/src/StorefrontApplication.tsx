@@ -7,6 +7,7 @@ import { CartPage } from "./pages/CartPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { CatalogPage } from "./pages/CatalogPage";
 import { HomePage } from "./pages/HomePage";
+import { GalleryPage } from "./pages/GalleryPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PolicyPage } from "./pages/PolicyPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
@@ -32,6 +33,7 @@ export function StorefrontApplication({ data }: { data: StorefrontHomepage }) {
         <Route path="/owner/*" element={<OwnerRoutes />} />
         <Route element={<CartProvider><SiteLayout data={data} /></CartProvider>}>
           <Route path="/" element={<HomePage data={data} />} />
+          <Route path="/gallery" element={<GalleryPage data={data} />} />
           <Route path="/catalog" element={<CatalogPage data={data} />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />

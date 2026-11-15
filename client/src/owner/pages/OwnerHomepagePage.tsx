@@ -5,6 +5,16 @@ import type {
   AdminProduct,
 } from "@sweet-juniper/shared";
 import { requestAdminJson } from "../../services/admin-api";
+import {
+  galleryColumns,
+  galleryMediaIds,
+  galleryOrder,
+  galleryShape,
+  galleryTileShapes,
+  type GalleryOrderKey,
+  type GalleryShapeKey,
+  type GalleryTileShape,
+} from "../../utils/homepage-gallery";
 import { useAdminResource } from "../use-admin-resource";
 
 type ContentObject = Record<string, unknown>;
@@ -127,12 +137,92 @@ export function OwnerHomepagePage() {
   function toggleGalleryMedia(mediaId: string, selected: boolean) {
     setDraft((current) => {
       if (!current) return current;
-      const selectedIds = asStringArray(current.home.galleryMediaIds, []);
-      let galleryMediaIds = selectedIds;
-      if (selected && !selectedIds.includes(mediaId)) galleryMediaIds = [...selectedIds, mediaId];
-      else if (!selected) galleryMediaIds = selectedIds.filter((id) => id !== mediaId);
-      return { ...current, home: { ...current.home, galleryMediaIds } };
+      const selectedIds = galleryMediaIds(current.home.galleryMediaIds);
+      const nextIds = selected
+        ? selectedIds.includes(mediaId) ? selectedIds : [...selectedIds, mediaId]
+        : selectedIds.filter((id) => id !== mediaId);
+      const desktopOrder = galleryOrder(current.home, "galleryDesktopOrder", selectedIds)
+        .filter((id) => selected || id !== mediaId);
+      const mobileOrder = galleryOrder(current.home, "galleryMobileOrder", selectedIds)
+        .filter((id) => selected || id !== mediaId);
+      const home = {
+        ...current.home,
+        galleryMediaIds: nextIds,
+        galleryDesktopOrder: selected && !selectedIds.includes(mediaId) ? [...desktopOrder, mediaId] : desktopOrder,
+        galleryMobileOrder: selected && !selectedIds.includes(mediaId) ? [...mobileOrder, mediaId] : mobileOrder,
+      };
+      if (!selected) {
+        for (const key of ["galleryDesktopShapes", "galleryMobileShapes"]) {
+          const shapes = { ...asObject(home[key]) };
+          delete shapes[mediaId];
+          home[key] = shapes;
+        }
+      }
+      return { ...current, home };
     });
+  }
+
+  function moveGalleryMedia(orderKey: GalleryOrderKey, mediaId: string, direction: -1 | 1) {
+    setDraft((current) => {
+      if (!current) return current;
+      const order = galleryOrder(current.home, orderKey, galleryMediaIds(current.home.galleryMediaIds));
+      const index = order.indexOf(mediaId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= order.length) return current;
+      [order[index], order[target]] = [order[target], order[index]];
+      return { ...current, home: { ...current.home, [orderKey]: order } };
+    });
+  }
+
+  function setGalleryShape(shapesKey: GalleryShapeKey, mediaId: string, shape: GalleryTileShape) {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        home: {
+          ...current.home,
+          [shapesKey]: { ...asObject(current.home[shapesKey]), [mediaId]: shape },
+        },
+      };
+    });
+  }
+
+  function renderGalleryOrder(
+    order: string[],
+    orderKey: GalleryOrderKey,
+    shapesKey: GalleryShapeKey,
+    breakpointName: string,
+  ) {
+    return (
+      <div className="owner-gallery-order">
+        <h3>{breakpointName} order and tile shapes</h3>
+        <ol>
+          {order.map((mediaId, index) => {
+            const item = mediaOptions.find((media) => media.id === mediaId);
+            if (!item) return null;
+            return (
+              <li key={mediaId}>
+                <span>{index + 1}. {item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</span>
+                <div className="owner-gallery-order__actions">
+                  <button className="text-link" disabled={Boolean(busy) || index === 0} onClick={() => moveGalleryMedia(orderKey, mediaId, -1)} type="button">Move up</button>
+                  <button className="text-link" disabled={Boolean(busy) || index === order.length - 1} onClick={() => moveGalleryMedia(orderKey, mediaId, 1)} type="button">Move down</button>
+                </div>
+                <label>
+                  <span>{breakpointName} tile shape</span>
+                  <select
+                    disabled={Boolean(busy)}
+                    onChange={(event) => setGalleryShape(shapesKey, mediaId, event.target.value as GalleryTileShape)}
+                    value={galleryShape(draft?.home || {}, shapesKey, mediaId)}
+                  >
+                    {galleryTileShapes.map((shape) => <option key={shape.value} value={shape.value}>{shape.label}</option>)}
+                  </select>
+                </label>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    );
   }
 
   function getSectionVisibility(): Record<string, boolean> {
@@ -282,6 +372,13 @@ export function OwnerHomepagePage() {
 
   const rows = content.data || [];
   const promotion = asObject(draft?.home.promotionalContent);
+  const selectedGalleryIds = galleryMediaIds(draft?.home.galleryMediaIds);
+  const desktopGalleryOrder = galleryOrder(draft?.home || {}, "galleryDesktopOrder", selectedGalleryIds);
+  const mobileGalleryOrder = galleryOrder(draft?.home || {}, "galleryMobileOrder", selectedGalleryIds);
+  const savedDesktopGalleryColumns = galleryColumns(draft?.home.galleryDesktopColumns, 3);
+  const desktopGalleryColumns = savedDesktopGalleryColumns === 1 ? 3 : savedDesktopGalleryColumns;
+  const savedMobileGalleryColumns = galleryColumns(draft?.home.galleryMobileColumns, 2);
+  const mobileGalleryColumns = savedMobileGalleryColumns > 2 ? 2 : savedMobileGalleryColumns;
   const visibility = getSectionVisibility();
   const order = sectionOrder();
 
@@ -365,6 +462,9 @@ export function OwnerHomepagePage() {
             <div className="owner-form-grid">
               <label><span>Eyebrow</span><input maxLength={100} onChange={(event) => updateSection("home", "galleryEyebrow", event.target.value)} value={asText(draft.home.galleryEyebrow, "A CLOSER LOOK")} /></label>
               <label><span>Heading</span><input maxLength={180} onChange={(event) => updateSection("home", "galleryTitle", event.target.value)} value={asText(draft.home.galleryTitle, "Around the studio")} /></label>
+              <label className="owner-form-grid__wide"><span>Gallery introduction (optional)</span><textarea maxLength={500} onChange={(event) => updateSection("home", "galleryDescription", event.target.value)} rows={2} value={asText(draft.home.galleryDescription)} /></label>
+              <label><span>Desktop columns</span><select onChange={(event) => updateSection("home", "galleryDesktopColumns", Number(event.target.value))} value={desktopGalleryColumns}><option value={2}>2 columns</option><option value={3}>3 columns</option><option value={4}>4 columns</option></select></label>
+              <label><span>Mobile columns</span><select onChange={(event) => updateSection("home", "galleryMobileColumns", Number(event.target.value))} value={mobileGalleryColumns}><option value={1}>1 column</option><option value={2}>2 columns</option></select></label>
             </div>
             {mediaOptions.length ? (
               <div className="owner-gallery-options">
@@ -383,7 +483,14 @@ export function OwnerHomepagePage() {
                 ))}
               </div>
             ) : <p className="owner-empty-card">Upload homepage or product media before selecting gallery items.</p>}
-            <p className="owner-help-note">Select the photos and videos to show in the gallery, then save the homepage section.</p>
+            <label className="owner-checkbox"><input checked={draft.home.galleryShowCaptions !== false} onChange={(event) => updateSection("home", "galleryShowCaptions", event.target.checked)} type="checkbox" /> Show media captions</label>
+            {selectedGalleryIds.length ? (
+              <div className="owner-gallery-organizers">
+                {renderGalleryOrder(desktopGalleryOrder, "galleryDesktopOrder", "galleryDesktopShapes", "Desktop")}
+                {renderGalleryOrder(mobileGalleryOrder, "galleryMobileOrder", "galleryMobileShapes", "Mobile")}
+              </div>
+            ) : <p className="owner-help-note">Select media to arrange its order and tile shape for desktop and mobile.</p>}
+            <p className="owner-help-note">The homepage shows a five-item preview. The full gallery uses these responsive orders, tile shapes, and column settings.</p>
             <button className="button button--primary" disabled={Boolean(busy)} onClick={() => void saveSection("home")} type="button">{busy === "home" ? "Saving…" : "Save gallery"}</button>
           </section>
 
