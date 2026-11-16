@@ -145,7 +145,7 @@ export function OwnerHomepagePage() {
         .filter((id) => selected || id !== mediaId);
       const mobileOrder = galleryOrder(current.home, "galleryMobileOrder", selectedIds)
         .filter((id) => selected || id !== mediaId);
-      const home = {
+      const home: ContentObject = {
         ...current.home,
         galleryMediaIds: nextIds,
         galleryDesktopOrder: selected && !selectedIds.includes(mediaId) ? [...desktopOrder, mediaId] : desktopOrder,
