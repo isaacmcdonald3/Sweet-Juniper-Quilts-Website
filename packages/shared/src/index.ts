@@ -99,6 +99,7 @@ export interface CloudinaryUploadLimits {
 }
 
 export interface AdminProduct extends CatalogProduct {
+  sku: string;
   isPublished: boolean;
   archivedAt: string | null;
   lowInventoryThreshold: number;

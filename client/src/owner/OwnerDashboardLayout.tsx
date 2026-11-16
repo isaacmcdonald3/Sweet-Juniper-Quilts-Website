@@ -9,6 +9,7 @@ const ownerLinks = [
   { to: "/owner/categories", label: "Categories" },
   { to: "/owner/orders", label: "Orders" },
   { to: "/owner/homepage", label: "Homepage" },
+  { to: "/owner/gallery", label: "Gallery" },
   { to: "/owner/media", label: "Media" },
   { to: "/owner/email-logs", label: "Email logs" },
   { to: "/owner/settings", label: "Settings" },

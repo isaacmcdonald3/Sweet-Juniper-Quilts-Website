@@ -20,6 +20,7 @@ export function SiteLayout({ data }: { data: StorefrontHomepage }) {
           <NavLink to="/" end>Home</NavLink>
           <NavLink to="/catalog">Shop</NavLink>
           <Link to="/#our-story">Our story</Link>
+          <NavLink to="/gallery">Gallery</NavLink>
           <Link to="/#contact">Contact</Link>
           <NavLink className="shop-nav__cart" to="/cart">
             Bag <span aria-label={`${itemCount} items`}>({itemCount})</span>

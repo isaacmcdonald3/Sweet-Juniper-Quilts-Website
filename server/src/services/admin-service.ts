@@ -10,12 +10,13 @@ import type {
 import type { ProductFulfillmentType } from "@sweet-juniper/shared";
 
 const productSelection =
-  "id,name,slug,description,price,category_id,subcategory,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
+  "id,name,slug,description,price,sku,category_id,subcategory,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
 
 export class AdminConflictError extends Error {}
 
 interface ProductInput {
   name: string;
+  sku: string;
   description: string;
   price: number;
   categoryId: string | null;
@@ -62,6 +63,7 @@ interface ProductMediaRow {
 interface AdminProductRow {
   id: string;
   name: string;
+  sku: string;
   slug: string;
   description: string | null;
   price: number | string;
@@ -158,6 +160,7 @@ function mapProduct(row: AdminProductRow): AdminProduct {
   return {
     id: row.id,
     name: row.name,
+    sku: row.sku,
     slug: row.slug,
     description: row.description || "",
     price: Number(row.price),
@@ -211,6 +214,7 @@ function mapOrderSummary(row: AdminOrderRow): AdminOrderSummary {
 function toProductRow(input: ProductInput, slug?: string) {
   return {
     name: input.name,
+    sku: input.sku.trim(),
     ...(slug ? { slug } : {}),
     description: input.description,
     price: input.price,
@@ -390,7 +394,12 @@ export function createAdminService(supabase: SupabaseClient) {
       .insert(toProductRow(input, slugify(input.name)))
       .select(productSelection)
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505" && error.message.includes("products_sku_case_insensitive_idx")) {
+        throw new AdminConflictError("That SKU is already assigned to another product.");
+      }
+      throw error;
+    }
     await audit(actorId, "product.created", "product", data.id);
     return mapProduct(data);
   }
@@ -406,7 +415,12 @@ export function createAdminService(supabase: SupabaseClient) {
       .eq("id", id)
       .select(productSelection)
       .maybeSingle();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505" && error.message.includes("products_sku_case_insensitive_idx")) {
+        throw new AdminConflictError("That SKU is already assigned to another product.");
+      }
+      throw error;
+    }
     if (!data) return null;
     await audit(actorId, input.isArchived ? "product.archived" : "product.updated", "product", id);
     return mapProduct(data);

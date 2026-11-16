@@ -32,6 +32,7 @@ const productFiltersSchema = z.object({
 
 const adminProductSchema = z.object({
   name: z.string().trim().min(1).max(150),
+  sku: z.string().trim().min(1).max(100),
   description: z.string().max(5000),
   price: z.number().finite().min(0).max(1_000_000),
   categoryId: z.string().uuid().nullable(),

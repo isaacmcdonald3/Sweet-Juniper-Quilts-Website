@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { OwnerCategoriesPage } from "./pages/OwnerCategoriesPage";
 import { OwnerDashboardHome } from "./pages/OwnerDashboardHome";
 import { OwnerHomepagePage } from "./pages/OwnerHomepagePage";
+import { OwnerGalleryPage } from "./pages/OwnerGalleryPage";
 import { OwnerOrdersPage } from "./pages/OwnerOrdersPage";
 import { OwnerEmailLogsPage } from "./pages/OwnerEmailLogsPage";
 import { OwnerPlaceholderPage } from "./pages/OwnerPlaceholderPage";
@@ -44,6 +45,7 @@ export function OwnerRoutes() {
         <Route path="categories" element={<OwnerCategoriesPage />} />
         <Route path="orders" element={<OwnerOrdersPage />} />
         <Route path="homepage" element={<OwnerHomepagePage />} />
+        <Route path="gallery" element={<OwnerGalleryPage />} />
         <Route path="media" element={<OwnerMediaPage />} />
         <Route path="email-logs" element={<OwnerEmailLogsPage />} />
         <Route path="settings" element={<OwnerPlaceholderPage title="Settings" message="Store and account settings will be added when their related workflows are introduced." />} />

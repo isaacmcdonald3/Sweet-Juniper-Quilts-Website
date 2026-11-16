@@ -161,6 +161,24 @@ test("administrative requests require the configured owner identity", async () =
       description: "",
       price: 180,
       categoryId: null,
+      subcategory: null,
+      inventoryQuantity: 1,
+      lowInventoryThreshold: 2,
+      fulfillmentType: "ready_to_ship",
+      isPublished: true,
+      isFeatured: false,
+      isArchived: false,
+    })
+    .expect(400, { error: "Product details are invalid." });
+  await request(app)
+    .post("/api/admin/products")
+    .set("Authorization", "Bearer owner-token")
+    .send({
+      name: "Baby Quilt",
+      sku: "SJQ-TEST-1",
+      description: "",
+      price: 180,
+      categoryId: null,
       subcategory: "Baby Quilts",
       inventoryQuantity: 1,
       lowInventoryThreshold: 2,

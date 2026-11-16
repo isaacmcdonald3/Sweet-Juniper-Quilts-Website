@@ -6,6 +6,7 @@ import { useAdminResource } from "../use-admin-resource";
 
 interface ProductFields {
   name: string;
+  sku: string;
   description: string;
   price: number;
   categoryId: string;
@@ -21,6 +22,7 @@ interface ProductFields {
 function fieldsFromProduct(product?: AdminProduct): ProductFields {
   return {
     name: product?.name || "",
+    sku: product?.sku || "",
     description: product?.description || "",
     price: product?.price || 0,
     categoryId: product?.categoryId || "",
@@ -124,6 +126,7 @@ export function OwnerProductsPage() {
           </div>
           <div className="owner-form-grid">
             <label><span>Product name</span><input maxLength={150} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, name: event.target.value } })} required value={editing.fields.name} /></label>
+            <label><span>SKU</span><input autoCapitalize="characters" maxLength={100} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, sku: event.target.value } })} required value={editing.fields.sku} /></label>
             <label><span>Price (USD)</span><input min="0" onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, price: Number(event.target.value) } })} required step="0.01" type="number" value={editing.fields.price} /></label>
             <label><span>Category</span><select onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, categoryId: event.target.value, subcategory: event.target.value ? editing.fields.subcategory : "" } })} value={editing.fields.categoryId}><option value="">Uncategorized</option>{(categories.data || []).map((category) => <option key={category.id} value={category.id}>{category.name}{category.isPublished ? "" : " (hidden)"}</option>)}</select></label>
             <label><span>Subcategory (optional)</span><input disabled={!editing.fields.categoryId} maxLength={100} onChange={(event) => setEditing({ ...editing, fields: { ...editing.fields, subcategory: event.target.value } })} value={editing.fields.subcategory} /></label>
@@ -148,7 +151,7 @@ export function OwnerProductsPage() {
               <thead><tr><th>Product</th><th>Status</th><th>Price</th><th>Inventory</th><th>Actions</th></tr></thead>
               <tbody>{products.data.map((product) => (
                 <tr key={product.id}>
-                  <td><strong>{product.name}</strong><small>{product.category?.name || "Uncategorized"}{product.subcategory ? ` · ${product.subcategory}` : ""}</small></td>
+                  <td><strong>{product.name}</strong><small>SKU: {product.sku}</small><small>{product.category?.name || "Uncategorized"}{product.subcategory ? ` · ${product.subcategory}` : ""}</small></td>
                   <td><span className={`owner-status ${product.archivedAt ? "owner-status--muted" : ""}`}>{productStatus(product)}</span></td>
                   <td>${product.price.toFixed(2)}</td>
                   <td>{product.fulfillmentType === "made_to_order" ? "Made to order" : `${product.inventoryQuantity} available`}</td>

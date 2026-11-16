@@ -119,7 +119,7 @@ export function OwnerMediaPage() {
       {error && <p className="owner-error" role="alert">{error}</p>}
       <section className="owner-panel owner-edit-form">
         <div className="owner-panel__heading"><h2>Homepage media</h2></div>
-        <p className="owner-help-note">These files are independent of products. After upload, assign them to the hero, story, or promotion area in Homepage management.</p>
+        <p className="owner-help-note">These files are independent of products. After upload, assign them to the hero, story, promotion, or Gallery area in Homepage or Gallery management.</p>
         {limits.error && <p className="owner-error" role="alert">{limits.error}</p>}
         {limits.data && !limits.data.configured && <p className="owner-notice" role="status">Cloudinary uploads are not configured yet.</p>}
         <form className="owner-form-grid" onSubmit={(event) => void uploadHomepageAsset(event)}>
