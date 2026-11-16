@@ -58,7 +58,7 @@ export class MediaNotFoundError extends Error {}
 export class MediaConflictError extends Error {}
 
 const librarySelection =
-  "id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets,poster:media_library!media_library_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)";
+  "id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets";
 const assignmentSelection =
   "id,product_id,media_library_id,sort_order,is_primary,poster_media_library_id,products(name),media:media_library!product_media_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets),poster:media_library!product_media_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)";
 
@@ -105,11 +105,15 @@ function mapLibrary(
   };
 }
 
-function mapAssignment(
+async function mapAssignment(
   row: ProductMediaAssignmentRow,
   cloudinary: CloudinaryMediaClient,
-): AdminProductMedia {
-  const media = one(row.media);
+  hydrateLibraryRows: (rows: MediaLibraryRow[]) => Promise<MediaLibraryRow[]>,
+): Promise<AdminProductMedia> {
+  const rawMedia = one(row.media);
+  const media = rawMedia
+    ? (await hydrateLibraryRows([rawMedia]))[0]
+    : null;
   const poster = one(row.poster);
   const product = one(row.products);
   if (!media) throw new Error("A product media assignment has no media library item.");
@@ -175,6 +179,28 @@ export function createMediaService(
     if (error) throw error;
   }
 
+  async function hydrateLibraryRows(rows: MediaLibraryRow[]): Promise<MediaLibraryRow[]> {
+    const posterIds = [...new Set(
+      rows
+        .map((row) => row.poster_media_library_id)
+        .filter((id): id is string => Boolean(id)),
+    )];
+    if (!posterIds.length) return rows;
+
+    const { data, error } = await supabase
+      .from("media_library")
+      .select(librarySelection)
+      .in("id", posterIds);
+    if (error) throw error;
+    const posters = new Map((data as MediaLibraryRow[]).map((row) => [row.id, row]));
+    return rows.map((row) => ({
+      ...row,
+      poster: row.poster_media_library_id
+        ? posters.get(row.poster_media_library_id) || null
+        : null,
+    }));
+  }
+
   async function getLibraryMedia(mediaId: string): Promise<MediaLibraryRow> {
     const { data, error } = await supabase
       .from("media_library")
@@ -183,7 +209,7 @@ export function createMediaService(
       .maybeSingle();
     if (error) throw error;
     if (!data) throw new MediaNotFoundError("Media library item not found.");
-    return data as MediaLibraryRow;
+    return (await hydrateLibraryRows([data as MediaLibraryRow]))[0];
   }
 
   async function getProductAssignment(
@@ -298,7 +324,7 @@ export function createMediaService(
       await deleteUploadedAsset(uploaded.publicId, mediaType);
       throw error;
     }
-    let row = data as MediaLibraryRow;
+    let row = (await hydrateLibraryRows([data as MediaLibraryRow]))[0];
     await audit(actorId, "media_library.replaced", mediaId, { mediaType });
     const cleanupPending = await retryCleanup(row);
     if (cleanupPending > 0) row = await getLibraryMedia(mediaId);
@@ -312,7 +338,8 @@ export function createMediaService(
       .order("created_at", { ascending: false })
       .limit(2000);
     if (error) throw error;
-    return (data as MediaLibraryRow[]).map((row) => mapLibrary(row, cloudinary));
+    const rows = await hydrateLibraryRows(data as MediaLibraryRow[]);
+    return rows.map((row) => mapLibrary(row, cloudinary));
   }
 
   async function listProductMedia(productId: string): Promise<AdminProductMedia[]> {
@@ -332,9 +359,9 @@ export function createMediaService(
       .order("sort_order")
       .order("created_at");
     if (error) throw error;
-    return (data as ProductMediaAssignmentRow[]).map((row) =>
-      mapAssignment({ ...row, products: product }, cloudinary),
-    );
+    return Promise.all((data as ProductMediaAssignmentRow[]).map((row) =>
+      mapAssignment({ ...row, products: product }, cloudinary, hydrateLibraryRows),
+    ));
   }
 
   async function assertLibraryMediaUnassigned(row: MediaLibraryRow): Promise<void> {
@@ -484,7 +511,8 @@ export function createMediaService(
     if (error) throw error;
     if (!data) throw new MediaNotFoundError("Media library item not found.");
     await audit(actorId, "media_library.updated", mediaId, changes);
-    return mapLibrary(data as MediaLibraryRow, cloudinary);
+    const row = (await hydrateLibraryRows([data as MediaLibraryRow]))[0];
+    return mapLibrary(row, cloudinary);
   }
 
   async function addProductMedia(
@@ -526,7 +554,11 @@ export function createMediaService(
       .single();
     if (error) throw error;
     await audit(actorId, "product_media.assigned", mediaId, { productId });
-    return mapAssignment({ ...(data as ProductMediaAssignmentRow), products: product }, cloudinary);
+    return mapAssignment(
+      { ...(data as ProductMediaAssignmentRow), products: product },
+      cloudinary,
+      hydrateLibraryRows,
+    );
   }
 
   async function updateProductMedia(
@@ -579,7 +611,7 @@ export function createMediaService(
     if (error) throw error;
     if (!data) throw new MediaNotFoundError("Product media assignment not found.");
     await audit(actorId, "product_media.updated", mediaId, { productId, ...changes });
-    return mapAssignment(data as ProductMediaAssignmentRow, cloudinary);
+    return mapAssignment(data as ProductMediaAssignmentRow, cloudinary, hydrateLibraryRows);
   }
 
   async function removeProductMedia(

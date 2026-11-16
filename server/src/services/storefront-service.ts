@@ -23,7 +23,6 @@ interface MediaRow {
   created_at: string;
   deleted_at: string | null;
   cleanup_pending_assets: unknown;
-  poster?: MediaRow | MediaRow[] | null;
 }
 
 interface ProductMediaAssignmentRow {
@@ -178,13 +177,29 @@ export function createStorefrontService(
         .select("content_key,content,is_published"),
       supabase
         .from("media_library")
-        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets,poster:media_library!media_library_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)")
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets")
         .is("deleted_at", null)
         .order("created_at", { ascending: false }),
     ]);
 
     if (contentResult.error) throw contentResult.error;
     if (mediaResult.error) throw mediaResult.error;
+    const mediaRows = mediaResult.data as MediaRow[];
+    const posterIds = [...new Set(
+      mediaRows
+        .map((item) => item.poster_media_library_id)
+        .filter((id): id is string => Boolean(id)),
+    )];
+    const postersById = new Map<string, MediaRow>();
+    if (posterIds.length) {
+      const { data: posterRows, error: posterError } = await supabase
+        .from("media_library")
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets")
+        .in("id", posterIds);
+      if (posterError) throw posterError;
+      for (const poster of posterRows as MediaRow[]) postersById.set(poster.id, poster);
+    }
+
     const content = Object.fromEntries(
       contentResult.data
         .filter((row) => row.is_published)
@@ -197,8 +212,10 @@ export function createStorefrontService(
       content,
       categories,
       featuredProducts: products.filter((product) => product.isFeatured),
-      mediaLibrary: (mediaResult.data as MediaRow[]).map((item): CatalogProductMedia => {
-        const poster = one(item.poster);
+      mediaLibrary: mediaRows.map((item): CatalogProductMedia => {
+        const poster = item.poster_media_library_id
+          ? postersById.get(item.poster_media_library_id)
+          : null;
         return {
           id: item.id,
           cloudinaryAssetId: item.cloudinary_asset_id,

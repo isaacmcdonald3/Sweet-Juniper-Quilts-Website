@@ -39,9 +39,32 @@ const homepage: StorefrontHomepage = {
   mediaLibrary: [],
 };
 
-type MockQueryResult = { data: never[]; error: null };
+type MockQueryResult = { data: unknown[]; error: null };
+
+const homepageVideo = {
+  id: "video-id",
+  media_type: "video",
+  cloudinary_asset_id: "video-asset",
+  cloudinary_public_id: null,
+  media_url: "https://media.example/video.mp4",
+  alt_text: null,
+  poster_media_library_id: "poster-id",
+  created_at: "2026-01-01T00:00:00Z",
+  deleted_at: null,
+  cleanup_pending_assets: [],
+};
+const homepagePoster = {
+  ...homepageVideo,
+  id: "poster-id",
+  media_type: "image",
+  cloudinary_asset_id: "poster-asset",
+  media_url: "https://media.example/poster.jpg",
+  poster_media_library_id: null,
+};
 
 class RecordingQuery implements PromiseLike<MockQueryResult> {
+  private ids: readonly unknown[] | null = null;
+
   constructor(
     private readonly table: string,
     private readonly selections: string[],
@@ -53,6 +76,10 @@ class RecordingQuery implements PromiseLike<MockQueryResult> {
   }
 
   eq(_column: string, _value: unknown): this { return this; }
+  in(_column: string, values: readonly unknown[]): this {
+    this.ids = values;
+    return this;
+  }
   is(_column: string, _value: unknown): this { return this; }
   order(_column: string, _options?: { ascending?: boolean }): this { return this; }
   limit(_count: number): this { return this; }
@@ -61,7 +88,10 @@ class RecordingQuery implements PromiseLike<MockQueryResult> {
     onfulfilled?: ((value: MockQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
-    return Promise.resolve({ data: [], error: null }).then(onfulfilled, onrejected);
+    const data = this.table === "media_library"
+      ? this.ids ? [homepagePoster] : [homepageVideo]
+      : [];
+    return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected);
   }
 }
 
@@ -161,17 +191,19 @@ test("catalog routes expose data and validate filters and product slugs", async 
   failCatalog = false;
 });
 
-test("homepage media query uses the media library self-relation for posters", async () => {
+test("homepage fetches poster media separately without a recursive PostgREST embed", async () => {
   const mediaSelections: string[] = [];
   const supabase = {
     from: (table: string) => new RecordingQuery(table, mediaSelections),
   } as unknown as SupabaseClient;
 
-  await createStorefrontService(supabase).loadHomepage();
+  const result = await createStorefrontService(supabase).loadHomepage();
 
-  assert.ok(mediaSelections.some((selection) =>
-    selection.includes("poster:media_library!media_library_poster_media_library_id_fkey("),
+  assert.equal(mediaSelections.length, 2);
+  assert.ok(mediaSelections.every((selection) =>
+    !selection.includes("media_library!media_library_poster_media_library_id_fkey"),
   ));
+  assert.equal(result.mediaLibrary?.[0]?.posterUrl, homepagePoster.media_url);
 });
 
 test("CORS only grants the configured customer origin", async () => {
