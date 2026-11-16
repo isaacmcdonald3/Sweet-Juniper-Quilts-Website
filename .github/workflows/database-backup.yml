@@ -27,7 +27,7 @@ jobs:
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 3.1.0
+          version: latest
 
       - name: Install PostgreSQL and age tools
         run: |

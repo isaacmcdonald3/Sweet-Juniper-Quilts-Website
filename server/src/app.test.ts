@@ -318,7 +318,7 @@ test("transactional templates escape user content and keep owner mail minimal", 
   assert.match(shipping.html, /Track package/);
   assert.match(shipping.text, /Tracking number: 12345/);
   const owner = renderEmail("owner_new_paid_order", order, null, "https://shop.example");
-  assert.match(owner.html, /Q-1/);
+  assert.match(owner.html, /#104/);
   assert.doesNotMatch(owner.html, /123 Main St/);
 });
 
