@@ -4,6 +4,7 @@ import { test } from "node:test";
 import pino from "pino";
 import request from "supertest";
 import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CatalogCategory,
   CatalogProduct,
@@ -22,6 +23,7 @@ import { createMediaService } from "./services/media-service.js";
 import { createCheckoutService } from "./services/checkout-service.js";
 import { createEmailService } from "./services/email-service.js";
 import { renderEmail } from "./services/email-templates.js";
+import { createStorefrontService } from "./services/storefront-service.js";
 import { verifyResendWebhookSignature } from "./services/resend-webhook.js";
 
 const bootstrap: StorefrontBootstrap = {
@@ -36,6 +38,33 @@ const homepage: StorefrontHomepage = {
   featuredProducts: [],
   mediaLibrary: [],
 };
+
+type MockQueryResult = { data: never[]; error: null };
+
+class RecordingQuery implements PromiseLike<MockQueryResult> {
+  constructor(
+    private readonly table: string,
+    private readonly selections: string[],
+  ) {}
+
+  select(selection: string): this {
+    if (this.table === "media_library") this.selections.push(selection);
+    return this;
+  }
+
+  eq(_column: string, _value: unknown): this { return this; }
+  is(_column: string, _value: unknown): this { return this; }
+  order(_column: string, _options?: { ascending?: boolean }): this { return this; }
+  limit(_count: number): this { return this; }
+
+  then<TResult1 = MockQueryResult, TResult2 = never>(
+    onfulfilled?: ((value: MockQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve({ data: [], error: null }).then(onfulfilled, onrejected);
+  }
+}
+
 let receivedFilters: ProductListFilters | undefined;
 let databaseReady = true;
 let failBootstrap = false;
@@ -130,6 +159,19 @@ test("catalog routes expose data and validate filters and product slugs", async 
   const failure = await request(app).get("/api/products").expect(500);
   assert.equal(JSON.stringify(failure.body).includes("private product query"), false);
   failCatalog = false;
+});
+
+test("homepage media query uses the media library self-relation for posters", async () => {
+  const mediaSelections: string[] = [];
+  const supabase = {
+    from: (table: string) => new RecordingQuery(table, mediaSelections),
+  } as unknown as SupabaseClient;
+
+  await createStorefrontService(supabase).loadHomepage();
+
+  assert.ok(mediaSelections.some((selection) =>
+    selection.includes("poster:media_library!media_library_poster_media_library_id_fkey("),
+  ));
 });
 
 test("CORS only grants the configured customer origin", async () => {
