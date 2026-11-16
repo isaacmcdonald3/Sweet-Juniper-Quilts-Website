@@ -243,7 +243,10 @@ create index product_media_poster_library_lookup_idx
 
 delete from public.product_media where deleted_at is not null;
 
-drop index public.product_media_active_order_idx;
+drop policy if exists"Public can read media for published products" on public.product_media;
+
+drop index if exists public.product_media_active_order_idx;
+
 alter table public.product_media
   drop constraint product_media_product_id_cloudinary_asset_id_key,
   drop column media_type,
@@ -259,8 +262,6 @@ alter table public.product_media
 
 create index product_media_product_order_idx
   on public.product_media (product_id, sort_order);
-
-drop policy "Public can read media for published products" on public.product_media;
 
 create policy "Public can read media for published products"
   on public.product_media for select to anon, authenticated
