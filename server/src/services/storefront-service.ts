@@ -10,7 +10,35 @@ import type {
 import type { CloudinaryMediaClient } from "./cloudinary-service.js";
 
 const productSelection =
-  "id,name,slug,description,price,category_id,subcategory,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_cloudinary_public_id,poster_url,deleted_at)";
+  "id,name,slug,description,price,category_id,subcategory,inventory_quantity,fulfillment_type,is_featured,categories(id,name,slug,description),product_media(id,media_library_id,sort_order,is_primary,poster_media_library_id,media:media_library!product_media_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets),poster:media_library!product_media_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets))";
+
+interface MediaRow {
+  id: string;
+  media_type: "image" | "video";
+  cloudinary_asset_id: string;
+  cloudinary_public_id: string | null;
+  media_url: string;
+  alt_text: string | null;
+  poster_media_library_id: string | null;
+  created_at: string;
+  deleted_at: string | null;
+  cleanup_pending_assets: unknown;
+  poster?: MediaRow | MediaRow[] | null;
+}
+
+interface ProductMediaAssignmentRow {
+  id: string;
+  media_library_id: string;
+  sort_order: number;
+  is_primary: boolean;
+  poster_media_library_id: string | null;
+  media: MediaRow | MediaRow[] | null;
+  poster: MediaRow | MediaRow[] | null;
+}
+
+function one<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] || null : value || null;
+}
 
 function mapCategory(category: {
   id: string;
@@ -48,39 +76,31 @@ function mapProduct(row: {
     slug: string;
     description: string | null;
   }> | null;
-  product_media: Array<{
-    id: string;
-    media_type: "image" | "video";
-    cloudinary_asset_id: string;
-    cloudinary_public_id: string | null;
-    media_url: string;
-    alt_text: string | null;
-    is_primary: boolean;
-    sort_order: number;
-    poster_cloudinary_asset_id: string | null;
-    poster_cloudinary_public_id: string | null;
-    poster_url: string | null;
-    deleted_at: string | null;
-  }> | null;
+  product_media: ProductMediaAssignmentRow[] | null;
 }, cloudinary?: CloudinaryMediaClient): CatalogProduct {
   const media = (row.product_media || [])
-    .filter((item) => !item.deleted_at)
-    .map((item) => ({
-      id: item.id,
-      cloudinaryAssetId: item.cloudinary_asset_id,
-      mediaType: item.media_type,
-      url: item.cloudinary_public_id
-        ? cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url
-        : item.media_url,
-      altText: item.alt_text,
-      posterUrl: item.poster_cloudinary_asset_id
-        ? item.poster_cloudinary_public_id
-          ? cloudinary?.deliveryUrl(item.poster_cloudinary_public_id, "image") || item.poster_url
-          : item.poster_url
-        : null,
-      isPrimary: item.is_primary,
-      sortOrder: item.sort_order,
-    }))
+    .map((assignment) => {
+      const item = one(assignment.media);
+      const poster = one(assignment.poster);
+      if (!item || item.deleted_at) return null;
+      return {
+        id: item.id,
+        cloudinaryAssetId: item.cloudinary_asset_id,
+        mediaType: item.media_type,
+        url: item.cloudinary_public_id
+          ? cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url
+          : item.media_url,
+        altText: item.alt_text,
+        posterUrl: poster
+          ? poster.cloudinary_public_id
+            ? cloudinary?.deliveryUrl(poster.cloudinary_public_id, "image") || poster.media_url
+            : poster.media_url
+          : null,
+        isPrimary: assignment.is_primary,
+        sortOrder: assignment.sort_order,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || left.sortOrder - right.sortOrder);
   const category = Array.isArray(row.categories) ? row.categories[0] : row.categories;
 
@@ -150,21 +170,21 @@ export function createStorefrontService(
   }
 
   async function loadHomepage(): Promise<StorefrontHomepage> {
-    const [categories, products, contentResult, homepageMediaResult] = await Promise.all([
+    const [categories, products, contentResult, mediaResult] = await Promise.all([
       listCategories(),
       listProducts(),
       supabase
         .from("homepage_content")
         .select("content_key,content,is_published"),
       supabase
-        .from("homepage_media")
-        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text")
+        .from("media_library")
+        .select("id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets,poster:media_library!media_library_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)")
         .is("deleted_at", null)
         .order("created_at", { ascending: false }),
     ]);
 
     if (contentResult.error) throw contentResult.error;
-    if (homepageMediaResult.error) throw homepageMediaResult.error;
+    if (mediaResult.error) throw mediaResult.error;
     const content = Object.fromEntries(
       contentResult.data
         .filter((row) => row.is_published)
@@ -177,26 +197,25 @@ export function createStorefrontService(
       content,
       categories,
       featuredProducts: products.filter((product) => product.isFeatured),
-      mediaLibrary: [
-        ...products.flatMap((product) => product.media),
-        ...(homepageMediaResult.data as Array<{
-          id: string;
-          media_type: "image" | "video";
-          cloudinary_asset_id: string;
-          cloudinary_public_id: string;
-          media_url: string;
-          alt_text: string | null;
-        }>).map((item): CatalogProductMedia => ({
+      mediaLibrary: (mediaResult.data as MediaRow[]).map((item): CatalogProductMedia => {
+        const poster = one(item.poster);
+        return {
           id: item.id,
           cloudinaryAssetId: item.cloudinary_asset_id,
           mediaType: item.media_type,
-          url: cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url,
+          url: item.cloudinary_public_id
+            ? cloudinary?.deliveryUrl(item.cloudinary_public_id, item.media_type) || item.media_url
+            : item.media_url,
           altText: item.alt_text,
-          posterUrl: null,
+          posterUrl: poster
+            ? poster.cloudinary_public_id
+              ? cloudinary?.deliveryUrl(poster.cloudinary_public_id, "image") || poster.media_url
+              : poster.media_url
+            : null,
           isPrimary: false,
           sortOrder: 0,
-        })),
-      ],
+        };
+      }),
       publishedSections,
     };
   }

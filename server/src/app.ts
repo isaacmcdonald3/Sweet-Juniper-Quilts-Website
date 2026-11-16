@@ -67,19 +67,24 @@ const homepageContentSchema = z.object({
 const mediaUploadSchema = z.object({
   mediaType: z.enum(["image", "video"]),
   altText: z.string().max(500).optional(),
-  replaceMediaId: z.string().uuid().optional(),
 });
 
-const homepageMediaUploadSchema = z.object({
-  mediaType: z.enum(["image", "video"]),
-  altText: z.string().max(500).optional(),
+const productMediaAssignmentSchema = z.object({
+  mediaId: z.string().uuid(),
 });
 
-const mediaUpdateSchema = z
+const libraryMediaUpdateSchema = z
   .object({
     altText: z.string().max(500).nullable().optional(),
+    posterMediaId: z.string().uuid().nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0);
+
+const productMediaUpdateSchema = z
+  .object({
     sortOrder: z.number().int().min(0).max(1_000_000).optional(),
     isPrimary: z.boolean().optional(),
+    posterMediaId: z.string().uuid().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0);
 
@@ -413,24 +418,6 @@ export function createApp(services: AppServices) {
     }
     next();
   };
-  const validateProductMediaAddress: RequestHandler = (request, response, next) => {
-    const productId = z.string().uuid().safeParse(request.params.id);
-    if (!productId.success) {
-      response.status(400).json({ error: "Product address is invalid." });
-      return;
-    }
-    next();
-  };
-  const validateVideoPosterAddress: RequestHandler = (request, response, next) => {
-    const productId = z.string().uuid().safeParse(request.params.id);
-    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-    if (!productId.success || !mediaId.success) {
-      response.status(400).json({ error: "Media address is invalid." });
-      return;
-    }
-    next();
-  };
-
   admin.get("/media/limits", (_request, response) => {
     response.json(services.media.getUploadLimits());
   });
@@ -443,26 +430,18 @@ export function createApp(services: AppServices) {
     }
   });
 
-  admin.get("/homepage-media", async (_request, response, next) => {
-    try {
-      response.json(await services.media.listHomepageMedia());
-    } catch (error) {
-      next(error);
-    }
-  });
-
   admin.post(
-    "/homepage-media",
+    "/media",
     requireConfiguredCloudinary,
     services.media.uploadMiddleware,
     async (request, response, next) => {
-      const parsed = homepageMediaUploadSchema.safeParse(request.body);
+      const parsed = mediaUploadSchema.safeParse(request.body);
       if (!parsed.success || !request.file) {
         response.status(400).json({ error: "Choose a supported image or video file and provide valid details." });
         return;
       }
       try {
-        response.status(201).json(await services.media.uploadHomepageMedia(
+        response.status(201).json(await services.media.uploadLibraryMedia(
           getOwnerId(response),
           request.file,
           parsed.data.mediaType,
@@ -474,27 +453,52 @@ export function createApp(services: AppServices) {
     },
   );
 
-  admin.delete("/homepage-media/:mediaId", async (request, response, next) => {
+  admin.put(
+    "/media/:mediaId/replace",
+    requireConfiguredCloudinary,
+    services.media.uploadMiddleware,
+    async (request, response, next) => {
+      const mediaId = z.string().uuid().safeParse(request.params.mediaId);
+      const parsed = mediaUploadSchema.safeParse(request.body);
+      if (!mediaId.success || !parsed.success || !request.file) {
+        response.status(400).json({ error: "Choose a supported replacement file and provide valid details." });
+        return;
+      }
+      try {
+        response.json(await services.media.replaceLibraryMedia(
+          getOwnerId(response),
+          mediaId.data,
+          request.file,
+          parsed.data.mediaType,
+        ));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  admin.patch("/media/:mediaId", async (request, response, next) => {
     const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-    if (!mediaId.success) {
-      response.status(400).json({ error: "Homepage media address is invalid." });
+    const parsed = libraryMediaUpdateSchema.safeParse(request.body);
+    if (!mediaId.success || !parsed.success) {
+      response.status(400).json({ error: "Media details are invalid." });
       return;
     }
     try {
-      response.json(await services.media.removeHomepageMedia(getOwnerId(response), mediaId.data));
+      response.json(await services.media.updateLibraryMedia(getOwnerId(response), mediaId.data, parsed.data));
     } catch (error) {
       next(error);
     }
   });
 
-  admin.post("/homepage-media/:mediaId/retry-cleanup", async (request, response, next) => {
+  admin.delete("/media/:mediaId", async (request, response, next) => {
     const mediaId = z.string().uuid().safeParse(request.params.mediaId);
     if (!mediaId.success) {
-      response.status(400).json({ error: "Homepage media address is invalid." });
+      response.status(400).json({ error: "Media library address is invalid." });
       return;
     }
     try {
-      response.json(await services.media.retryHomepageMediaCleanup(getOwnerId(response), mediaId.data));
+      response.json(await services.media.deleteLibraryMedia(getOwnerId(response), mediaId.data));
     } catch (error) {
       next(error);
     }
@@ -513,38 +517,26 @@ export function createApp(services: AppServices) {
     }
   });
 
-  admin.post(
-    "/products/:id/media",
-    requireConfiguredCloudinary,
-    validateProductMediaAddress,
-    services.media.uploadMiddleware,
-    async (request, response, next) => {
-      const parsedId = z.string().uuid().safeParse(request.params.id);
-      const parsed = mediaUploadSchema.safeParse(request.body);
-      if (!parsedId.success || !parsed.success || !request.file) {
-        response.status(400).json({ error: "Choose a supported media file and provide valid details." });
-        return;
-      }
-      try {
-        const result = await services.media.uploadProductMedia(
-          getOwnerId(response),
-          parsedId.data,
-          request.file,
-          parsed.data.mediaType,
-          parsed.data.altText?.trim() || null,
-          parsed.data.replaceMediaId,
-        );
-        response.status(201).json(result);
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  admin.post("/products/:id/media", async (request, response, next) => {
+    const productId = z.string().uuid().safeParse(request.params.id);
+    const parsed = productMediaAssignmentSchema.safeParse(request.body);
+    if (!productId.success || !parsed.success) {
+      response.status(400).json({ error: "Choose a valid Media Library item to assign." });
+      return;
+    }
+    try {
+      response.status(201).json(
+        await services.media.addProductMedia(getOwnerId(response), productId.data, parsed.data.mediaId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
 
   admin.patch("/products/:id/media/:mediaId", async (request, response, next) => {
     const productId = z.string().uuid().safeParse(request.params.id);
     const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-    const parsed = mediaUpdateSchema.safeParse(request.body);
+    const parsed = productMediaUpdateSchema.safeParse(request.body);
     if (!productId.success || !mediaId.success || !parsed.success) {
       response.status(400).json({ error: "Media details are invalid." });
       return;
@@ -579,49 +571,6 @@ export function createApp(services: AppServices) {
     }
   });
 
-  admin.post(
-    "/products/:id/media/:mediaId/poster",
-    requireConfiguredCloudinary,
-    validateVideoPosterAddress,
-    services.media.uploadMiddleware,
-    async (request, response, next) => {
-      const productId = z.string().uuid().safeParse(request.params.id);
-      const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-      if (!productId.success || !mediaId.success || !request.file) {
-        response.status(400).json({ error: "Choose a supported poster image." });
-        return;
-      }
-      try {
-        response.json(
-          await services.media.setVideoPoster(
-            getOwnerId(response),
-            productId.data,
-            mediaId.data,
-            request.file,
-          ),
-        );
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  admin.delete("/products/:id/media/:mediaId/poster", async (request, response, next) => {
-    const productId = z.string().uuid().safeParse(request.params.id);
-    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-    if (!productId.success || !mediaId.success) {
-      response.status(400).json({ error: "Media address is invalid." });
-      return;
-    }
-    try {
-      response.json(
-        await services.media.removeVideoPoster(getOwnerId(response), productId.data, mediaId.data),
-      );
-    } catch (error) {
-      next(error);
-    }
-  });
-
   admin.post("/media/:mediaId/retry-cleanup", async (request, response, next) => {
     const mediaId = z.string().uuid().safeParse(request.params.mediaId);
     if (!mediaId.success) {
@@ -630,7 +579,7 @@ export function createApp(services: AppServices) {
     }
     try {
       response.json(
-        await services.media.retryProductMediaCleanup(getOwnerId(response), mediaId.data),
+        await services.media.retryLibraryMediaCleanup(getOwnerId(response), mediaId.data),
       );
     } catch (error) {
       next(error);

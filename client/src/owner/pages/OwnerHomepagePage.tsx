@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   AdminHomepageContent,
-  AdminHomepageMedia,
+  AdminLibraryMedia,
   AdminProduct,
 } from "@sweet-juniper/shared";
 import { requestAdminJson } from "../../services/admin-api";
@@ -66,7 +66,7 @@ function productPayload(product: AdminProduct, isFeatured: boolean) {
 export function OwnerHomepagePage() {
   const content = useAdminResource<AdminHomepageContent[]>("/api/admin/homepage-content");
   const products = useAdminResource<AdminProduct[]>("/api/admin/products");
-  const homepageMedia = useAdminResource<AdminHomepageMedia[]>("/api/admin/homepage-media");
+  const mediaLibrary = useAdminResource<AdminLibraryMedia[]>("/api/admin/media");
   const [draft, setDraft] = useState<HomepageDraft | null>(null);
   const [featuredIds, setFeaturedIds] = useState<string[]>([]);
   const [extraDrafts, setExtraDrafts] = useState<Record<string, { contentText: string; isPublished: boolean }>>({});
@@ -97,16 +97,10 @@ export function OwnerHomepagePage() {
     if (products.data) setFeaturedIds(products.data.filter((product) => product.isFeatured).map((product) => product.id));
   }, [products.data]);
 
-  const mediaOptions = useMemo(() => (products.data || [])
-    .filter((product) => product.isPublished && !product.archivedAt && product.fulfillmentType === "ready_to_ship")
-    .flatMap((product) => product.media.map((media) => ({
-      ...media,
-      productName: product.name,
-    })))
-    .concat((homepageMedia.data || []).filter((media) => !media.deletedAt).map((media) => ({
-      ...media,
-      productName: "Homepage library",
-    }))), [homepageMedia.data, products.data]);
+  const mediaOptions = useMemo(
+    () => (mediaLibrary.data || []).filter((item) => !item.deletedAt),
+    [mediaLibrary.data],
+  );
 
   function updateSection(section: "home" | "about" | "contact", key: string, value: unknown) {
     setDraft((current) => {
@@ -281,17 +275,17 @@ export function OwnerHomepagePage() {
         <div><p className="eyebrow">CUSTOMIZE THE SHOP</p><h1>Homepage management</h1></div>
       </div>
       <p className="owner-help-note">
-        Changes are stored in Supabase and appear on the next storefront load. Upload homepage-specific or product photos and videos from the Media area, then select them in the Gallery tab or here for other homepage areas.
+        Changes are stored in Supabase and appear on the next storefront load. Upload photos and videos once in the Media tab, then select them here for homepage content.
       </p>
       {message && <p className="owner-success" role="status">{message}</p>}
       {error && <p className="owner-error" role="alert">{error}</p>}
-      {(content.error || products.error || homepageMedia.error) && (
+      {(content.error || products.error || mediaLibrary.error) && (
         <p className="owner-error" role="alert">
-          {content.error || products.error || homepageMedia.error}
-          <button className="text-link" onClick={() => { content.reload(); products.reload(); homepageMedia.reload(); }} type="button">Try again</button>
+          {content.error || products.error || mediaLibrary.error}
+          <button className="text-link" onClick={() => { content.reload(); products.reload(); mediaLibrary.reload(); }} type="button">Try again</button>
         </p>
       )}
-      {!draft || content.loading || products.loading || homepageMedia.loading ? <p className="owner-state" role="status">Loading homepage and media content…</p> : (
+      {!draft || content.loading || products.loading || mediaLibrary.loading ? <p className="owner-state" role="status">Loading homepage and media content…</p> : (
         <>
           <section className="owner-panel owner-homepage-editor">
             <div className="owner-panel__heading"><h2>Introduction and featured media</h2><span className="owner-status">{draft.published.home ? "Published" : "Hidden"}</span></div>
@@ -303,9 +297,9 @@ export function OwnerHomepagePage() {
                 <span>Featured homepage image or video</span>
                 <select onChange={(event) => updateSection("home", "heroMediaId", event.target.value)} value={asText(draft.home.heroMediaId)}>
                   <option value="">Use the current fallback media</option>
-                  {mediaOptions.map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</option>)}
+                  {mediaOptions.map((item) => <option key={item.id} value={item.id}>{item.altText || item.mediaType}</option>)}
                 </select>
-                <small>Product media from published products and homepage assets are available. Upload homepage assets from Media.</small>
+                <small>Select an existing image or video from the central Media Library.</small>
               </label>
               <label><span>Image alt text</span><input maxLength={300} onChange={(event) => updateSection("home", "imageAlt", event.target.value)} value={asText(draft.home.imageAlt)} /></label>
             </div>
@@ -322,7 +316,7 @@ export function OwnerHomepagePage() {
                 <span>About image</span>
                 <select onChange={(event) => updateSection("about", "mediaId", event.target.value)} value={asText(draft.about.mediaId)}>
                   <option value="">Use the current fallback image</option>
-                  {mediaOptions.filter((item) => item.mediaType === "image").map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.altText || "Image"}</option>)}
+                  {mediaOptions.filter((item) => item.mediaType === "image").map((item) => <option key={item.id} value={item.id}>{item.altText || "Image"}</option>)}
                 </select>
               </label>
             </div>
@@ -361,7 +355,7 @@ export function OwnerHomepagePage() {
                 <span>Promotional image</span>
                 <select onChange={(event) => updatePromotion("mediaId", event.target.value)} value={asText(promotion.mediaId)}>
                   <option value="">No promotional image</option>
-                  {mediaOptions.filter((item) => item.mediaType === "image").map((item) => <option key={item.id} value={item.id}>{item.productName} · {item.altText || "Image"}</option>)}
+                  {mediaOptions.filter((item) => item.mediaType === "image").map((item) => <option key={item.id} value={item.id}>{item.altText || "Image"}</option>)}
                 </select>
               </label>
             </div>

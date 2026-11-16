@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CatalogProductMedia } from "@sweet-juniper/shared";
+import { FullscreenMediaViewer } from "./FullscreenMediaViewer";
 
 export function ProductGallery({
   media,
@@ -9,22 +10,36 @@ export function ProductGallery({
   productName: string;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const selected = media[selectedIndex];
 
   return (
     <div className="product-gallery">
       <div className="product-gallery__stage">
         {selected?.mediaType === "video" ? (
-          <video controls playsInline poster={selected.posterUrl || media.find((item) => item.mediaType === "image")?.url}>
+          <video
+            aria-label={`Open ${productName} video in fullscreen`}
+            controls
+            onClick={() => setViewerIndex(selectedIndex)}
+            playsInline
+            poster={selected.posterUrl || media.find((item) => item.mediaType === "image")?.url}
+          >
             <source src={selected.url} />
             Your browser does not support video playback.
           </video>
-        ) : (
+        ) : selected ? (
+          <button
+            aria-label={`View ${productName} image in fullscreen`}
+            className="product-gallery__open-media"
+            onClick={() => setViewerIndex(selectedIndex)}
+            type="button"
+          >
           <img
             src={selected?.url || "/images/intro/chair-quilt.jpg"}
             alt={selected?.altText || productName}
           />
-        )}
+          </button>
+        ) : <img src="/images/intro/chair-quilt.jpg" alt={productName} />}
       </div>
       {media.length > 1 && (
         <div className="product-gallery__thumbs" aria-label="Product media">
@@ -48,6 +63,13 @@ export function ProductGallery({
           ))}
         </div>
       )}
+      <FullscreenMediaViewer
+        activeIndex={viewerIndex}
+        label={productName}
+        media={media}
+        onClose={() => setViewerIndex(null)}
+        onIndexChange={setViewerIndex}
+      />
     </div>
   );
 }

@@ -200,8 +200,8 @@ test("contact form validates submissions and email logs remain owner-only", asyn
 
 test("media endpoints are owner-only and report when Cloudinary is not configured", async () => {
   await request(app).get("/api/admin/media/limits").expect(401);
-  await request(app).get("/api/admin/homepage-media").expect(401);
-  await request(app).delete("/api/admin/homepage-media/invalid-id").expect(401);
+  await request(app).get("/api/admin/media").expect(401);
+  await request(app).delete("/api/admin/media/invalid-id").expect(401);
   await request(app)
     .get("/api/admin/media/limits")
     .set("Authorization", "Bearer customer-token")
@@ -217,24 +217,26 @@ test("media endpoints are owner-only and report when Cloudinary is not configure
       videoMimeTypes: ["video/mp4", "video/webm", "video/quicktime"],
     });
   await request(app)
-    .post("/api/admin/products/cbf8b29c-0f99-48bb-8e5e-2f246fcdd76e/media")
+    .post("/api/admin/media")
     .set("Authorization", "Bearer customer-token")
+    .field("mediaType", "image")
     .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
     .expect(403);
   await request(app)
+    .post("/api/admin/media")
+    .set("Authorization", "Bearer owner-token")
+    .field("mediaType", "image")
+    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
+    .expect(503, { error: "Media uploads are not configured yet." });
+  await request(app)
     .post("/api/admin/products/cbf8b29c-0f99-48bb-8e5e-2f246fcdd76e/media")
     .set("Authorization", "Bearer owner-token")
-    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
-    .expect(503, { error: "Media uploads are not configured yet." });
+    .send({ mediaId: "not-a-uuid" })
+    .expect(400, { error: "Choose a valid Media Library item to assign." });
   await request(app)
-    .post("/api/admin/homepage-media")
+    .delete("/api/admin/media/invalid-id")
     .set("Authorization", "Bearer owner-token")
-    .attach("file", Buffer.from("not uploaded"), { filename: "image.jpg", contentType: "image/jpeg" })
-    .expect(503, { error: "Media uploads are not configured yet." });
-  await request(app)
-    .delete("/api/admin/homepage-media/invalid-id")
-    .set("Authorization", "Bearer owner-token")
-    .expect(400, { error: "Homepage media address is invalid." });
+    .expect(400, { error: "Media library address is invalid." });
 });
 
 test("owner API preflight permits authenticated administrative methods", async () => {

@@ -142,9 +142,10 @@ a {
 .home-promotion > img {
   display: block;
   width: 100%;
-  max-height: 430px;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  max-height: min(65vh, 560px);
+  height: auto;
+  object-fit: contain;
+  background: #e9eee5;
 }
 
 .home-promotion__copy h2 {
@@ -369,10 +370,12 @@ a {
 .product-card__placeholder {
   display: grid;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  max-height: 430px;
+  height: auto;
+  aspect-ratio: auto;
   place-items: center;
   border-radius: 4px;
-  object-fit: cover;
+  object-fit: contain;
   background: #e9eee5;
   color: #9c684f;
   font-size: 2rem;
@@ -589,9 +592,9 @@ a {
 .home-hero__art video {
   display: block;
   width: 100%;
-  max-height: 460px;
-  aspect-ratio: 4 / 4.5;
-  object-fit: cover;
+  max-height: min(65vh, 560px);
+  height: auto;
+  object-fit: contain;
   background: #e8dece;
 }
 
@@ -676,7 +679,7 @@ a {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #ece5d9;
 }
 
@@ -707,7 +710,9 @@ a {
 
 .gallery-page__item--square { aspect-ratio: 1; }
 .gallery-page__item--landscape { aspect-ratio: 4 / 3; }
+.gallery-page__item--landscape-video { aspect-ratio: 16 / 9; }
 .gallery-page__item--portrait { aspect-ratio: 3 / 4; }
+.gallery-page__item--portrait-video { aspect-ratio: 9 / 16; }
 
 .gallery-page__item img,
 .gallery-page__item video {
@@ -716,21 +721,27 @@ a {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #ece5d9;
 }
 
-.gallery-page__item figcaption {
+.gallery-page__open-media {
   position: absolute;
-  z-index: 1;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  padding: 10px 12px;
-  background: rgb(250 248 243 / 92%);
-  color: #726d61;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.gallery-page__open-media img {
+  position: static;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .home-categories {
@@ -854,13 +865,15 @@ a {
 .product-card__image {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  transition: transform 400ms ease;
+  max-height: 430px;
+  height: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+  transition: opacity 200ms ease;
 }
 
 .product-card__image-link:hover .product-card__image {
-  transform: scale(1.035);
+  opacity: 0.92;
 }
 
 .product-card__details {
@@ -1207,6 +1220,8 @@ a {
 }
 
 .product-gallery__stage {
+  display: flex;
+  justify-content: center;
   overflow: hidden;
   border: 1px solid #e3d9cb;
   background: #ede5d7;
@@ -1215,9 +1230,33 @@ a {
 .product-gallery__stage img,
 .product-gallery__stage video {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   max-height: 680px;
-  aspect-ratio: 1 / 1;
+  height: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+  background: #eee8dd;
+}
+
+.product-gallery__open-media {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.product-gallery__open-media img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 680px;
+  height: auto;
+  aspect-ratio: auto;
   object-fit: contain;
   background: #eee8dd;
 }
@@ -1256,6 +1295,98 @@ a {
   color: #fffaf1;
   background: #526a54;
   font-size: 1.25rem;
+}
+
+.fullscreen-media-viewer {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: #fff;
+  background: #141614;
+}
+
+.fullscreen-media-viewer::backdrop {
+  background: #141614;
+}
+
+.fullscreen-media-viewer__stage {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 76px 24px;
+  touch-action: pan-y;
+}
+
+.fullscreen-media-viewer__stage > img,
+.fullscreen-media-viewer__stage > video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  background: #141614;
+}
+
+.fullscreen-media-viewer__close,
+.fullscreen-media-viewer__nav {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  color: #fff;
+  background: rgb(20 22 20 / 78%);
+  cursor: pointer;
+}
+
+.fullscreen-media-viewer__close {
+  top: 16px;
+  right: 16px;
+  width: 46px;
+  height: 46px;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.fullscreen-media-viewer__nav {
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  transform: translateY(-50%);
+  font-size: 2.3rem;
+  line-height: 1;
+}
+
+.fullscreen-media-viewer__nav:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.fullscreen-media-viewer__nav--previous { left: 16px; }
+.fullscreen-media-viewer__nav--next { right: 16px; }
+
+.fullscreen-media-viewer__position {
+  margin: 0;
+  padding: 0 0 18px;
+  color: rgb(255 255 255 / 82%);
+  font-size: 0.9rem;
+  text-align: center;
 }
 
 .product-detail__info {
@@ -1590,7 +1721,9 @@ a {
 
   .gallery-page__item--mobile-square { aspect-ratio: 1; }
   .gallery-page__item--mobile-landscape { aspect-ratio: 4 / 3; }
+  .gallery-page__item--mobile-landscape-video { aspect-ratio: 16 / 9; }
   .gallery-page__item--mobile-portrait { aspect-ratio: 3 / 4; }
+  .gallery-page__item--mobile-portrait-video { aspect-ratio: 9 / 16; }
 }
 
 @media (max-width: 650px) {
@@ -2367,8 +2500,9 @@ a {
 .owner-gallery-option video {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  max-height: 260px;
+  height: auto;
+  object-fit: contain;
   background: #ece5d9;
 }
 
@@ -2487,13 +2621,21 @@ a {
 }
 
 .owner-media-card > img,
-.owner-media-card > video,
+.owner-media-card > video {
+  display: block;
+  width: 100%;
+  max-height: min(70vh, 640px);
+  height: auto;
+  object-fit: contain;
+  color: #706d61;
+  background: #ede8dc;
+}
+
 .owner-media-card__placeholder {
   display: grid;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  min-height: 180px;
   place-items: center;
-  object-fit: cover;
   color: #706d61;
   background: #ede8dc;
 }

@@ -41,6 +41,17 @@ export interface CatalogProductMedia {
   sortOrder: number;
 }
 
+export interface AdminLibraryMedia extends CatalogProductMedia {
+  cloudinaryPublicId: string | null;
+  posterMediaId: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  cleanupPendingAssets: Array<
+    | { publicId: string; resourceType: "image" | "video" }
+    | { assetId: string; resourceType: "image" | "video" }
+  >;
+}
+
 export interface CatalogProduct {
   id: string;
   name: string;
@@ -72,23 +83,10 @@ export interface StorefrontHomepage {
 export interface AdminProductMedia extends CatalogProductMedia {
   productId: string;
   productName: string;
-  cloudinaryPublicId: string;
-  posterCloudinaryAssetId: string | null;
-  posterCloudinaryPublicId: string | null;
-  deletedAt: string | null;
-  cleanupPendingAssets: Array<
-    | { publicId: string; resourceType: "image" | "video" }
-    | { assetId: string; resourceType: "image" | "video" }
-  >;
+  posterMediaId: string | null;
 }
 
-export interface AdminHomepageMedia extends CatalogProductMedia {
-  deletedAt: string | null;
-  cleanupPendingAssets: Array<
-    | { publicId: string; resourceType: "image" | "video" }
-    | { assetId: string; resourceType: "image" | "video" }
-  >;
-}
+export type AdminHomepageMedia = AdminLibraryMedia;
 
 export interface CloudinaryUploadLimits {
   configured: boolean;

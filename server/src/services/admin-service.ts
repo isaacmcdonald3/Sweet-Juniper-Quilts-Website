@@ -10,7 +10,7 @@ import type {
 import type { ProductFulfillmentType } from "@sweet-juniper/shared";
 
 const productSelection =
-  "id,name,slug,description,price,sku,category_id,subcategory,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_type,cloudinary_asset_id,media_url,alt_text,is_primary,sort_order,poster_cloudinary_asset_id,poster_url,deleted_at,cleanup_pending_assets)";
+  "id,name,slug,description,price,sku,category_id,subcategory,inventory_quantity,low_inventory_threshold,fulfillment_type,is_featured,is_published,archived_at,created_at,categories(id,name,slug,description),product_media(id,media_library_id,sort_order,is_primary,poster_media_library_id,media:media_library!product_media_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets),poster:media_library!product_media_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets))";
 
 export class AdminConflictError extends Error {}
 
@@ -45,19 +45,22 @@ interface CategoryRelationRow {
 
 interface ProductMediaRow {
   id: string;
-  media_type: "image" | "video";
-  cloudinary_asset_id: string;
-  media_url: string;
-  alt_text: string | null;
+  media_library_id: string;
   is_primary: boolean;
   sort_order: number;
-  poster_cloudinary_asset_id: string | null;
-  poster_url: string | null;
-  deleted_at: string | null;
-  cleanup_pending_assets: Array<
-    | { publicId: string; resourceType: "image" | "video" }
-    | { assetId: string; resourceType: "image" | "video" }
-  > | null;
+  poster_media_library_id: string | null;
+  media: {
+    media_type: "image" | "video";
+    cloudinary_asset_id: string;
+    media_url: string;
+    alt_text: string | null;
+  } | Array<{
+    media_type: "image" | "video";
+    cloudinary_asset_id: string;
+    media_url: string;
+    alt_text: string | null;
+  }> | null;
+  poster: { media_url: string } | Array<{ media_url: string }> | null;
 }
 
 interface AdminProductRow {
@@ -142,17 +145,21 @@ function slugify(value: string): string {
 function mapProduct(row: AdminProductRow): AdminProduct {
   const category = Array.isArray(row.categories) ? row.categories[0] : row.categories;
   const media = (row.product_media || [])
-    .filter((item) => !item.deleted_at)
-    .map((item) => ({
-      id: item.id,
-      cloudinaryAssetId: item.cloudinary_asset_id,
-      mediaType: item.media_type,
-      url: item.media_url,
-      altText: item.alt_text,
-      posterUrl: item.poster_url,
-      isPrimary: item.is_primary,
-      sortOrder: item.sort_order,
-    }))
+    .map((assignment) => {
+      const item = Array.isArray(assignment.media) ? assignment.media[0] : assignment.media;
+      const poster = Array.isArray(assignment.poster) ? assignment.poster[0] : assignment.poster;
+      if (!item) throw new Error("A product media assignment has no media library item.");
+      return {
+        id: assignment.media_library_id,
+        cloudinaryAssetId: item.cloudinary_asset_id,
+        mediaType: item.media_type,
+        url: item.media_url,
+        altText: item.alt_text,
+        posterUrl: poster?.media_url || null,
+        isPrimary: assignment.is_primary,
+        sortOrder: assignment.sort_order,
+      };
+    })
     .sort((left, right) =>
       Number(right.isPrimary) - Number(left.isPrimary) || left.sortOrder - right.sortOrder,
     );

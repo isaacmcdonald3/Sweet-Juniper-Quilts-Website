@@ -43,6 +43,7 @@ export async function uploadAdminFile<T>(
   file: File,
   fields: Record<string, string>,
   onProgress: (progress: number) => void,
+  method = "POST",
 ): Promise<T> {
   if (!supabaseClient) throw new AdminApiError("Owner sign-in is not configured.", 503);
   const { data, error } = await supabaseClient.auth.getSession();
@@ -55,7 +56,7 @@ export async function uploadAdminFile<T>(
 
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", getApiUrl(path));
+    xhr.open(method, getApiUrl(path));
     xhr.responseType = "json";
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.addEventListener("progress", (event) => {

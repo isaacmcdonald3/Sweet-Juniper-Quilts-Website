@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   AdminHomepageContent,
-  AdminHomepageMedia,
-  AdminProduct,
+  AdminLibraryMedia,
 } from "@sweet-juniper/shared";
 import { requestAdminJson } from "../../services/admin-api";
 import {
@@ -35,8 +34,7 @@ function contentRow(rows: AdminHomepageContent[], key: string): AdminHomepageCon
 
 export function OwnerGalleryPage() {
   const content = useAdminResource<AdminHomepageContent[]>("/api/admin/homepage-content");
-  const products = useAdminResource<AdminProduct[]>("/api/admin/products");
-  const homepageMedia = useAdminResource<AdminHomepageMedia[]>("/api/admin/homepage-media");
+  const mediaLibrary = useAdminResource<AdminLibraryMedia[]>("/api/admin/media");
   const [home, setHome] = useState<ContentObject | null>(null);
   const [isPublished, setIsPublished] = useState(true);
   const [message, setMessage] = useState("");
@@ -50,16 +48,10 @@ export function OwnerGalleryPage() {
     setIsPublished(row?.isPublished ?? true);
   }, [content.data]);
 
-  const mediaOptions = useMemo(() => (products.data || [])
-    .filter((product) => product.isPublished && !product.archivedAt && product.fulfillmentType === "ready_to_ship")
-    .flatMap((product) => product.media.map((media) => ({
-      ...media,
-      productName: product.name,
-    })))
-    .concat((homepageMedia.data || []).filter((media) => !media.deletedAt).map((media) => ({
-      ...media,
-      productName: "Homepage library",
-    }))), [homepageMedia.data, products.data]);
+  const mediaOptions = useMemo(
+    () => (mediaLibrary.data || []).filter((item) => !item.deletedAt),
+    [mediaLibrary.data],
+  );
 
   function updateHome(key: string, value: unknown) {
     setHome((current) => {
@@ -133,7 +125,7 @@ export function OwnerGalleryPage() {
             if (!item) return null;
             return (
               <li key={mediaId}>
-                <span>{index + 1}. {item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</span>
+                <span>{index + 1}. {item.altText || item.mediaType}</span>
                 <div className="owner-gallery-order__actions">
                   <button className="text-link" disabled={busy || index === 0} onClick={() => moveGalleryMedia(orderKey, mediaId, -1)} type="button">Move up</button>
                   <button className="text-link" disabled={busy || index === order.length - 1} onClick={() => moveGalleryMedia(orderKey, mediaId, 1)} type="button">Move down</button>
@@ -182,7 +174,7 @@ export function OwnerGalleryPage() {
   const desktopColumns = savedDesktopColumns === 1 ? 3 : savedDesktopColumns;
   const savedMobileColumns = galleryColumns(home?.galleryMobileColumns, 2);
   const mobileColumns = savedMobileColumns > 2 ? 2 : savedMobileColumns;
-  const loadError = content.error || products.error || homepageMedia.error;
+  const loadError = content.error || mediaLibrary.error;
 
   return (
     <section className="owner-page">
@@ -197,10 +189,10 @@ export function OwnerGalleryPage() {
       {loadError && (
         <p className="owner-error" role="alert">
           {loadError}
-          <button className="text-link" onClick={() => { content.reload(); products.reload(); homepageMedia.reload(); }} type="button">Try again</button>
+          <button className="text-link" onClick={() => { content.reload(); mediaLibrary.reload(); }} type="button">Try again</button>
         </p>
       )}
-      {!home || content.loading || products.loading || homepageMedia.loading ? (
+      {!home || content.loading || mediaLibrary.loading ? (
         <p className="owner-state" role="status">Loading gallery and media content…</p>
       ) : (
         <section className="owner-panel owner-homepage-editor">
@@ -225,12 +217,11 @@ export function OwnerGalleryPage() {
                   {item.mediaType === "video"
                     ? <video muted playsInline preload="metadata"><source src={item.url} /></video>
                     : <img alt={item.altText || ""} loading="lazy" src={item.url} />}
-                  <span>{item.productName} · {item.mediaType}{item.altText ? ` · ${item.altText}` : ""}</span>
+                  <span>{item.altText || item.mediaType}</span>
                 </label>
               ))}
             </div>
-          ) : <p className="owner-empty-card">Upload homepage or product media before selecting gallery items.</p>}
-          <label className="owner-checkbox"><input checked={home.galleryShowCaptions !== false} disabled={busy} onChange={(event) => updateHome("galleryShowCaptions", event.target.checked)} type="checkbox" /> Show media captions</label>
+          ) : <p className="owner-empty-card">Upload media in the Media tab before selecting Gallery items.</p>}
           {selectedIds.length ? (
             <div className="owner-gallery-organizers">
               {renderGalleryOrder(desktopOrder, "galleryDesktopOrder", "galleryDesktopShapes", "Desktop")}
