@@ -1,0 +1,290 @@
+name: Encrypted database backup
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: sweet-juniper-database-backup
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: auto
+      R2_PREFIX: sweet-juniper/daily
+    steps:
+      - name: Check out backup scripts and database migrations
+        uses: actions/checkout@v4
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+
+      - name: Install PostgreSQL and age tools
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends age postgresql-client
+          aws --version
+          supabase --version
+
+      - name: Validate backup configuration
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          : "${SUPABASE_DB_URL:?Add the SUPABASE_DB_URL Actions secret.}"
+          : "${BACKUP_AGE_RECIPIENT:?Add the BACKUP_AGE_RECIPIENT Actions secret.}"
+          : "${R2_ACCESS_KEY_ID:?Add the bucket-scoped R2_ACCESS_KEY_ID Actions secret.}"
+          : "${R2_SECRET_ACCESS_KEY:?Add the bucket-scoped R2_SECRET_ACCESS_KEY Actions secret.}"
+          : "${R2_ACCOUNT_ID:?Add the R2_ACCOUNT_ID Actions variable.}"
+          : "${R2_BUCKET:?Add the private R2_BUCKET Actions variable.}"
+          [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?:// ]] || {
+            echo "::error::SUPABASE_DB_URL must be a PostgreSQL connection URL."
+            exit 1
+          }
+          [[ "$BACKUP_AGE_RECIPIENT" =~ ^age1[0-9a-z]+$ ]] || {
+            echo "::error::BACKUP_AGE_RECIPIENT is not a valid age public recipient."
+            exit 1
+          }
+          echo "BACKUP_WORK_DIR=$(mktemp -d "$RUNNER_TEMP/sjq-backup.XXXXXX")" >> "$GITHUB_ENV"
+
+      - name: Test age encryption and decryption tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          age-keygen -o "$BACKUP_WORK_DIR/test-identity.txt" 2> "$BACKUP_WORK_DIR/age-keygen.log"
+          test_recipient="$(age-keygen -y "$BACKUP_WORK_DIR/test-identity.txt")"
+          printf 'backup encryption self-test\n' > "$BACKUP_WORK_DIR/plaintext-test.txt"
+          age --encrypt --recipient "$test_recipient" \
+            --output "$BACKUP_WORK_DIR/encryption-test.age" \
+            "$BACKUP_WORK_DIR/plaintext-test.txt"
+          age --decrypt --identity "$BACKUP_WORK_DIR/test-identity.txt" \
+            --output "$BACKUP_WORK_DIR/decrypted-test.txt" \
+            "$BACKUP_WORK_DIR/encryption-test.age"
+          cmp "$BACKUP_WORK_DIR/plaintext-test.txt" "$BACKUP_WORK_DIR/decrypted-test.txt"
+
+      - name: Export Supabase roles, schema, data, and migration history
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          supabase db dump --remote="$SUPABASE_DB_URL" --file "$BACKUP_WORK_DIR/roles.sql" --role-only
+          supabase db dump --remote="$SUPABASE_DB_URL" --file "$BACKUP_WORK_DIR/schema.sql"
+          supabase db dump --remote="$SUPABASE_DB_URL" --file "$BACKUP_WORK_DIR/data.sql" \
+            --use-copy --data-only \
+            --exclude public.admin_audit_logs \
+            --exclude storage.buckets_vectors \
+            --exclude storage.vector_indexes
+          supabase db dump --remote="$SUPABASE_DB_URL" --file "$BACKUP_WORK_DIR/migration-history-schema.sql" \
+            --schema supabase_migrations
+          supabase db dump --remote="$SUPABASE_DB_URL" --file "$BACKUP_WORK_DIR/migration-history-data.sql" \
+            --schema supabase_migrations --use-copy --data-only
+
+      - name: Export Cloudinary asset inventory
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$SUPABASE_DB_URL" --no-psqlrc --set ON_ERROR_STOP=on --quiet \
+            --command "
+              COPY (
+                SELECT asset_scope, media_id, product_id, product_name, media_type,
+                       cloudinary_asset_id, cloudinary_public_id, media_url,
+                       poster_cloudinary_asset_id, poster_cloudinary_public_id,
+                       poster_url, is_primary, deleted_at, cleanup_pending_assets
+                FROM (
+                  SELECT
+                    'product'::text AS asset_scope,
+                    media.id::text AS media_id,
+                    product.id::text AS product_id,
+                    product.name::text AS product_name,
+                    media.media_type::text AS media_type,
+                    media.cloudinary_asset_id::text AS cloudinary_asset_id,
+                    media.cloudinary_public_id::text AS cloudinary_public_id,
+                    media.media_url::text AS media_url,
+                    media.poster_cloudinary_asset_id::text AS poster_cloudinary_asset_id,
+                    media.poster_cloudinary_public_id::text AS poster_cloudinary_public_id,
+                    media.poster_url::text AS poster_url,
+                    media.is_primary::boolean AS is_primary,
+                    media.deleted_at::text AS deleted_at,
+                    media.cleanup_pending_assets::text AS cleanup_pending_assets
+                  FROM public.product_media AS media
+                  JOIN public.products AS product ON product.id = media.product_id
+                  UNION ALL
+                  SELECT
+                    'homepage'::text,
+                    media.id::text,
+                    NULL::text,
+                    'Homepage library'::text,
+                    media.media_type::text,
+                    media.cloudinary_asset_id::text,
+                    media.cloudinary_public_id::text,
+                    media.media_url::text,
+                    NULL::text,
+                    NULL::text,
+                    NULL::text,
+                    false::boolean,
+                    media.deleted_at::text,
+                    media.cleanup_pending_assets::text
+                  FROM public.homepage_media AS media
+                ) AS inventory
+                ORDER BY asset_scope, product_name, media_id
+              ) TO STDOUT WITH CSV HEADER
+            " > "$BACKUP_WORK_DIR/cloudinary-media-inventory.csv"
+
+      - name: Export audit history without Auth-user dependencies
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'COPY "public"."admin_audit_logs" ("id", "actor_user_id", "action", "entity_type", "entity_id", "details", "created_at") FROM stdin;\n'
+            psql "$SUPABASE_DB_URL" --no-psqlrc --set ON_ERROR_STOP=on --quiet \
+              --command "
+                COPY (
+                  SELECT id, NULL::uuid, action, entity_type, entity_id, details, created_at
+                  FROM public.admin_audit_logs
+                  ORDER BY id
+                ) TO STDOUT
+              "
+            printf '\\.\n'
+          } > "$BACKUP_WORK_DIR/admin-audit-logs.sql"
+
+      - name: Validate and package backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+          archive="$BACKUP_WORK_DIR/sweet-juniper-$timestamp-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          python scripts/backup/prepare_backup.py \
+            --export-dir "$BACKUP_WORK_DIR" \
+            --output "$archive" \
+            --source-root "$GITHUB_WORKSPACE" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          python scripts/backup/verify_backup.py "$archive"
+          tar -tzf "$archive" > "$BACKUP_WORK_DIR/archive-contents.txt"
+          test -s "$BACKUP_WORK_DIR/archive-contents.txt"
+          echo "BACKUP_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Encrypt backup
+        shell: bash
+        env:
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          encrypted="$BACKUP_ARCHIVE.age"
+          age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" \
+            --output "$encrypted" "$BACKUP_ARCHIVE"
+          test -s "$encrypted"
+          head -c 40 "$encrypted" | grep --text --quiet '^age-encryption.org/v1'
+          echo "ENCRYPTED_BACKUP=$encrypted" >> "$GITHUB_ENV"
+
+      - name: Upload, verify, and retain 30 backups in private R2
+        shell: bash
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
+          object_key="$R2_PREFIX/$timestamp-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz.age"
+          local_sha="$(sha256sum "$ENCRYPTED_BACKUP" | cut -d ' ' -f 1)"
+          local_size="$(stat --format=%s "$ENCRYPTED_BACKUP")"
+
+          aws s3 cp "$ENCRYPTED_BACKUP" "s3://$R2_BUCKET/$object_key" \
+            --endpoint-url "$endpoint" --region auto --only-show-errors
+          remote_size="$(aws s3api head-object --bucket "$R2_BUCKET" --key "$object_key" \
+            --endpoint-url "$endpoint" --region auto --query ContentLength --output text)"
+          [[ "$remote_size" == "$local_size" ]] || {
+            echo "::error::R2 object size does not match the validated encrypted backup."
+            exit 1
+          }
+          aws s3 cp "s3://$R2_BUCKET/$object_key" "$BACKUP_WORK_DIR/remote-verification.age" \
+            --endpoint-url "$endpoint" --region auto --only-show-errors
+          remote_sha="$(sha256sum "$BACKUP_WORK_DIR/remote-verification.age" | cut -d ' ' -f 1)"
+          [[ "$remote_sha" == "$local_sha" ]] || {
+            echo "::error::Downloaded R2 object checksum does not match the uploaded backup."
+            exit 1
+          }
+
+          aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix "$R2_PREFIX/" \
+            --endpoint-url "$endpoint" --region auto > "$BACKUP_WORK_DIR/r2-objects.json"
+          python scripts/backup/retention.py \
+            --listing "$BACKUP_WORK_DIR/r2-objects.json" \
+            --prefix "$R2_PREFIX/" \
+            --protected-key "$object_key" \
+            --keep 30 > "$BACKUP_WORK_DIR/expired-backups.txt"
+          deleted=0
+          while IFS= read -r old_key; do
+            [[ -n "$old_key" ]] || continue
+            aws s3api delete-object --bucket "$R2_BUCKET" --key "$old_key" \
+              --endpoint-url "$endpoint" --region auto > /dev/null
+            deleted=$((deleted + 1))
+          done < "$BACKUP_WORK_DIR/expired-backups.txt"
+
+          echo "BACKUP_OBJECT_KEY=$object_key" >> "$GITHUB_ENV"
+          echo "BACKUP_SHA256=$local_sha" >> "$GITHUB_ENV"
+          echo "BACKUP_BYTES=$local_size" >> "$GITHUB_ENV"
+          echo "BACKUP_DELETED_COUNT=$deleted" >> "$GITHUB_ENV"
+
+      - name: Record successful backup status
+        shell: bash
+        env:
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Encrypted database backup complete"
+            echo
+            echo "- Completed: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "- Private R2 object: s3://$R2_BUCKET/$BACKUP_OBJECT_KEY"
+            echo "- Encrypted bytes: $BACKUP_BYTES"
+            echo "- SHA-256: $BACKUP_SHA256"
+            echo "- Older backups deleted after verification: $BACKUP_DELETED_COUNT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  notify-owner:
+    if: ${{ always() && needs.backup.result != 'success' }}
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out the notification helper
+        uses: actions/checkout@v4
+
+      - name: Create or update the owner notification issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+        run: python3 scripts/backup/notify_failure.py
