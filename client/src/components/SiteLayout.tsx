@@ -34,7 +34,7 @@ export function SiteLayout({ data }: { data: StorefrontHomepage }) {
               <span className="brand__mark"><StarMark /></span>
               <span>Sweet Juniper Quilts</span>
             </Link>
-            <p>Thoughtful quilts and kinusaiga, made slowly and meant to be cherished.</p>
+            <p>Quilts made slowly and meant to be cherished.</p>
           </div>
           <div className="shop-footer__links">
             <Link to="/catalog">Shop the collection</Link>
