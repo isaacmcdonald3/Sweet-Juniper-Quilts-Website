@@ -27,6 +27,7 @@ interface MediaLibraryRow {
   media_type: ProductMediaType;
   cloudinary_asset_id: string;
   cloudinary_public_id: string | null;
+  original_filename: string | null;
   media_url: string;
   alt_text: string | null;
   poster_media_library_id: string | null;
@@ -51,6 +52,7 @@ interface ProductMediaAssignmentRow {
 interface UploadFile {
   buffer: Buffer;
   mimetype: string;
+  originalname: string;
   size: number;
 }
 
@@ -58,9 +60,9 @@ export class MediaNotFoundError extends Error {}
 export class MediaConflictError extends Error {}
 
 const librarySelection =
-  "id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets";
+  "id,media_type,cloudinary_asset_id,cloudinary_public_id,original_filename,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets";
 const assignmentSelection =
-  "id,product_id,media_library_id,sort_order,is_primary,poster_media_library_id,products(name),media:media_library!product_media_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets),poster:media_library!product_media_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)";
+  "id,product_id,media_library_id,sort_order,is_primary,poster_media_library_id,products(name),media:media_library!product_media_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,original_filename,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets),poster:media_library!product_media_poster_media_library_id_fkey(id,media_type,cloudinary_asset_id,cloudinary_public_id,original_filename,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets)";
 
 function getPendingAssets(value: PendingAsset[] | null): PendingAsset[] {
   if (!Array.isArray(value)) return [];
@@ -77,6 +79,11 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return value || null;
 }
 
+function originalFilename(file: UploadFile): string | null {
+  const filename = file.originalname.split(/[\\/]/).pop()?.trim();
+  return filename ? filename.slice(0, 255) : null;
+}
+
 function mapLibrary(
   row: MediaLibraryRow,
   cloudinary: CloudinaryMediaClient,
@@ -86,6 +93,7 @@ function mapLibrary(
     id: row.id,
     cloudinaryAssetId: row.cloudinary_asset_id,
     cloudinaryPublicId: row.cloudinary_public_id,
+    originalFilename: row.original_filename,
     mediaType: row.media_type,
     url: row.cloudinary_public_id
       ? cloudinary.deliveryUrl(row.cloudinary_public_id, row.media_type) || row.media_url
@@ -262,6 +270,7 @@ export function createMediaService(
           media_type: uploaded.resourceType,
           cloudinary_asset_id: uploaded.assetId,
           cloudinary_public_id: uploaded.publicId,
+          original_filename: originalFilename(file),
           media_url: uploaded.secureUrl,
           alt_text: altText,
         })
@@ -314,6 +323,7 @@ export function createMediaService(
       .update({
         cloudinary_asset_id: uploaded.assetId,
         cloudinary_public_id: uploaded.publicId,
+        original_filename: originalFilename(file),
         media_url: uploaded.secureUrl,
         cleanup_pending_assets: pending,
       })

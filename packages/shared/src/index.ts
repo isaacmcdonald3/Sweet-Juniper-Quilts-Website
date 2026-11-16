@@ -43,6 +43,7 @@ export interface CatalogProductMedia {
 
 export interface AdminLibraryMedia extends CatalogProductMedia {
   cloudinaryPublicId: string | null;
+  originalFilename: string | null;
   posterMediaId: string | null;
   createdAt: string;
   deletedAt: string | null;

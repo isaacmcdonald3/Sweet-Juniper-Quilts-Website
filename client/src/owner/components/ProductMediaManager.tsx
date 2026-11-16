@@ -3,6 +3,13 @@ import type { AdminLibraryMedia, AdminProductMedia } from "@sweet-juniper/shared
 import { requestAdminJson } from "../../services/admin-api";
 import { useAdminResource } from "../use-admin-resource";
 
+function mediaDisplayName(item: AdminLibraryMedia): string {
+  return item.originalFilename
+    || item.altText
+    || item.cloudinaryPublicId?.split("/").pop()
+    || item.cloudinaryAssetId;
+}
+
 export function ProductMediaManager({ productId }: { productId: string }) {
   const media = useAdminResource<AdminProductMedia[]>(`/api/admin/products/${productId}/media`);
   const library = useAdminResource<AdminLibraryMedia[]>("/api/admin/media");
@@ -11,9 +18,7 @@ export function ProductMediaManager({ productId }: { productId: string }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const assignedIds = useMemo(() => new Set((media.data || []).map((item) => item.id)), [media.data]);
-  const available = (library.data || []).filter(
-    (item) => !item.deletedAt && !assignedIds.has(item.id),
-  );
+  const available = (library.data || []).filter((item) => !item.deletedAt);
   const activeMedia = media.data || [];
   const imageOptions = (library.data || []).filter((item) => item.mediaType === "image" && !item.deletedAt);
 
@@ -114,29 +119,46 @@ export function ProductMediaManager({ productId }: { productId: string }) {
         <p className="owner-error" role="alert">{library.error} <button className="text-link" onClick={library.reload} type="button">Try again</button></p>
       ) : available.length ? (
         <div className="owner-media-picker">
-          {available.map((item) => (
-            <label className="owner-media-option" key={item.id}>
-              <input
-                checked={selectedIds.includes(item.id)}
-                disabled={busy}
-                onChange={(event) => setSelectedIds((current) =>
-                  event.target.checked
-                    ? [...current, item.id]
-                    : current.filter((id) => id !== item.id)
-                )}
-                type="checkbox"
-              />
-              {item.mediaType === "video"
-                ? <video aria-label={item.altText || "Video"} muted playsInline poster={item.posterUrl || undefined} preload="metadata"><source src={item.url} /></video>
-                : <img alt={item.altText || ""} loading="lazy" src={item.url} />}
-              <span>{item.altText || item.mediaType}</span>
-            </label>
-          ))}
-          <button className="button button--outline" disabled={busy || !selectedIds.length} onClick={() => void assignSelected()} type="button">
+          {available.map((item) => {
+            const isAssigned = assignedIds.has(item.id);
+            const isSelected = selectedIds.includes(item.id);
+            const mediaName = mediaDisplayName(item);
+            return (
+              <label
+                className={`owner-media-option ${isAssigned ? "owner-media-option--assigned" : ""}`}
+                key={item.id}
+              >
+                <input
+                  aria-label={`${mediaName}, ${item.mediaType === "image" ? "Photo" : "Video"}, ${isAssigned ? "assigned" : "available"}`}
+                  checked={isAssigned || isSelected}
+                  disabled={busy}
+                  onChange={(event) => {
+                    if (isAssigned) {
+                      const assignment = activeMedia.find((assigned) => assigned.id === item.id);
+                      if (assignment && !event.target.checked) void remove(assignment);
+                      return;
+                    }
+                    setSelectedIds((current) =>
+                      event.target.checked
+                        ? [...current, item.id]
+                        : current.filter((id) => id !== item.id)
+                    );
+                  }}
+                  type="checkbox"
+                />
+                <span className="owner-media-option__name">{mediaName}</span>
+                <span className="owner-media-option__type">{item.mediaType === "image" ? "Photo" : "Video"}</span>
+                <span className="owner-media-option__status">
+                  {isAssigned ? "Assigned · uncheck to remove" : isSelected ? "Selected" : "Available"}
+                </span>
+              </label>
+            );
+          })}
+          <button className="button button--outline owner-media-picker__submit" disabled={busy || !selectedIds.length} onClick={() => void assignSelected()} type="button">
             {busy ? "Assigning…" : `Assign selected media${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
           </button>
         </div>
-      ) : <p className="owner-empty-card">All library items are assigned, or upload media in the Media tab first.</p>}
+      ) : <p className="owner-empty-card">Upload media in the Media tab to assign it to this product.</p>}
 
       {media.loading ? <p className="owner-state">Loading product assignments…</p> : media.error ? (
         <p className="owner-error" role="alert">{media.error}</p>

@@ -26,6 +26,8 @@ export function FullscreenMediaViewer({
     const dialog = dialogRef.current;
     if (!dialog) return;
     const previousOverflow = document.body.style.overflow;
+    const scrollPosition = { x: window.scrollX, y: window.scrollY };
+    document.body.classList.add("fullscreen-media-open");
     document.body.style.overflow = "hidden";
     if (!dialog.open) dialog.showModal();
     closeButtonRef.current?.focus();
@@ -48,7 +50,9 @@ export function FullscreenMediaViewer({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = previousOverflow;
+      document.body.classList.remove("fullscreen-media-open");
       if (dialog.open) dialog.close();
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
     };
   }, []);
 
@@ -70,6 +74,7 @@ export function FullscreenMediaViewer({
   return (
     <dialog
       aria-label={`${label} media viewer`}
+      aria-modal="true"
       className="fullscreen-media-viewer"
       onCancel={(event) => {
         event.preventDefault();
@@ -91,7 +96,9 @@ export function FullscreenMediaViewer({
       </button>
       <div
         className="fullscreen-media-viewer__stage"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
         onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}
         onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
       >
