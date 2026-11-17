@@ -18,6 +18,7 @@ export function OwnerMediaPage() {
   const [file, setFile] = useState<File | null>(null);
   const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [altText, setAltText] = useState("");
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [busyId, setBusyId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -101,18 +102,17 @@ export function OwnerMediaPage() {
   }
 
   async function remove(item: AdminLibraryMedia) {
-    if (!window.confirm("Delete this media from Cloudinary and the library? Items assigned to products, the homepage, or Gallery cannot be deleted until unassigned.")) return;
+    if (!window.confirm("Permanently delete this media file from Cloudinary and the Media Library? This cannot be undone.")) return;
     setBusyId(item.id);
     setError("");
     setMessage("");
     try {
-      const result = await requestAdminJson<{ cleanupPending: number }>(
+      await requestAdminJson<{ deleted: true }>(
         `/api/admin/media/${item.id}`,
         { method: "DELETE" },
       );
-      setMessage(result.cleanupPending
-        ? "Media was removed; Cloudinary cleanup is pending. Retry it below."
-        : "Media was deleted from the library.");
+      setDeletedIds((current) => [...current, item.id]);
+      setMessage("Media was permanently deleted from Cloudinary and the library.");
       media.reload();
     } catch (cause) {
       setError(cause instanceof AdminApiError
@@ -123,29 +123,10 @@ export function OwnerMediaPage() {
     }
   }
 
-  async function retryCleanup(item: AdminLibraryMedia) {
-    setBusyId(item.id);
-    setError("");
-    setMessage("");
-    try {
-      const result = await requestAdminJson<{ cleanupPending: number }>(
-        `/api/admin/media/${item.id}/retry-cleanup`,
-        { method: "POST" },
-      );
-      setMessage(result.cleanupPending
-        ? "Cloudinary cleanup is still pending. Try again later."
-        : "Cloudinary cleanup completed.");
-      media.reload();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Cloudinary cleanup could not be retried.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  const activeImages = (media.data || []).filter(
-    (item) => item.mediaType === "image" && !item.deletedAt,
+  const visibleMedia = (media.data || []).filter(
+    (item) => !item.deletedAt && !deletedIds.includes(item.id),
   );
+  const activeImages = visibleMedia.filter((item) => item.mediaType === "image");
 
   return (
     <section className="owner-page">
@@ -153,7 +134,7 @@ export function OwnerMediaPage() {
         <div><p className="eyebrow">CENTRAL ASSET LIBRARY</p><h1>Media</h1></div>
       </div>
       <p className="owner-help-note">
-        Upload each photo or video once, then assign it to products, Gallery, or homepage content. Removing an assignment keeps the original media here.
+        Upload each photo or video once, then assign it to products, Gallery, or homepage content. Delete only after removing all assignments.
       </p>
       {message && <p className="owner-success" role="status">{message}</p>}
       {error && <p className="owner-error" role="alert">{error}</p>}
@@ -207,13 +188,11 @@ export function OwnerMediaPage() {
       </section>
       {media.loading ? <p className="owner-state" role="status">Loading Media Library…</p> : media.error ? (
         <p className="owner-error" role="alert">{media.error} <button className="text-link" onClick={media.reload} type="button">Try again</button></p>
-      ) : media.data?.length ? (
+      ) : visibleMedia.length ? (
         <div className="owner-media-grid">
-          {media.data.map((item) => (
-            <article className={`owner-media-card ${item.deletedAt ? "owner-media-card--removed" : ""}`} key={item.id}>
-              {item.deletedAt ? (
-                <div className="owner-media-card__placeholder">Removed from library</div>
-              ) : item.mediaType === "video" ? (
+          {visibleMedia.map((item) => (
+            <article className="owner-media-card" key={item.id}>
+              {item.mediaType === "video" ? (
                 <video aria-label={item.altText || "Video preview"} controls playsInline poster={item.posterUrl || undefined} preload="metadata">
                   <source src={item.url} />
                 </video>
@@ -221,73 +200,61 @@ export function OwnerMediaPage() {
                 <img alt={item.altText || ""} loading="lazy" src={item.url} />
               )}
               <div className="owner-media-card__body">
-                <p className="owner-status">{item.deletedAt ? "Removed" : item.mediaType}</p>
+                <p className="owner-status">{item.mediaType}</p>
                 <code>{item.cloudinaryAssetId}</code>
-                {!item.deletedAt && (
-                  <>
-                    <label>
-                      <span>Alt text</span>
-                      <input
-                        defaultValue={item.altText || ""}
-                        disabled={busyId === item.id}
-                        maxLength={500}
-                        onBlur={(event) => {
-                          const nextAltText = event.currentTarget.value.trim() || null;
-                          if (nextAltText !== item.altText) {
-                            void update(item, { altText: nextAltText }, "Alt text saved.");
-                          }
-                        }}
-                      />
-                    </label>
-                    {item.mediaType === "video" && (
-                      <label>
-                        <span>Default video poster</span>
-                        <select
-                          disabled={busyId === item.id}
-                          onChange={(event) => void update(
-                            item,
-                            { posterMediaId: event.target.value || null },
-                            "Video poster updated.",
-                          )}
-                          value={item.posterMediaId || ""}
-                        >
-                          <option value="">No poster</option>
-                          {activeImages.filter((image) => image.id !== item.id).map((image) => (
-                            <option key={image.id} value={image.id}>
-                              {image.altText || image.cloudinaryAssetId}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                    <div className="owner-media-card__actions">
-                      <label className="text-link owner-media-card__file-action">
-                        Replace original
-                        <input
-                          accept={item.mediaType === "image" ? imageAccept : videoAccept}
-                          disabled={busyId === item.id}
-                          onChange={(event) => {
-                            const replacement = event.currentTarget.files?.[0];
-                            if (replacement) void replace(item, replacement);
-                            event.currentTarget.value = "";
-                          }}
-                          type="file"
-                        />
-                      </label>
-                      <button className="text-link" disabled={busyId === item.id} onClick={() => void remove(item)} type="button">
-                        Delete from library
-                      </button>
-                    </div>
-                  </>
+                <label>
+                  <span>Alt text</span>
+                  <input
+                    defaultValue={item.altText || ""}
+                    disabled={busyId === item.id}
+                    maxLength={500}
+                    onBlur={(event) => {
+                      const nextAltText = event.currentTarget.value.trim() || null;
+                      if (nextAltText !== item.altText) {
+                        void update(item, { altText: nextAltText }, "Alt text saved.");
+                      }
+                    }}
+                  />
+                </label>
+                {item.mediaType === "video" && (
+                  <label>
+                    <span>Default video poster</span>
+                    <select
+                      disabled={busyId === item.id}
+                      onChange={(event) => void update(
+                        item,
+                        { posterMediaId: event.target.value || null },
+                        "Video poster updated.",
+                      )}
+                      value={item.posterMediaId || ""}
+                    >
+                      <option value="">No poster</option>
+                      {activeImages.filter((image) => image.id !== item.id).map((image) => (
+                        <option key={image.id} value={image.id}>
+                          {image.altText || image.cloudinaryAssetId}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 )}
-                {item.deletedAt && item.cleanupPendingAssets.length > 0 && (
-                  <div className="owner-cleanup-notice">
-                    <p>{item.cleanupPendingAssets.length} asset(s) pending cleanup.</p>
-                    <button className="text-link" disabled={busyId === item.id} onClick={() => void retryCleanup(item)} type="button">
-                      {busyId === item.id ? "Retrying…" : "Retry cleanup"}
-                    </button>
-                  </div>
-                )}
+                <div className="owner-media-card__actions">
+                  <label className="text-link owner-media-card__file-action">
+                    Replace original
+                    <input
+                      accept={item.mediaType === "image" ? imageAccept : videoAccept}
+                      disabled={busyId === item.id}
+                      onChange={(event) => {
+                        const replacement = event.currentTarget.files?.[0];
+                        if (replacement) void replace(item, replacement);
+                        event.currentTarget.value = "";
+                      }}
+                      type="file"
+                    />
+                  </label>
+                  <button className="text-link" disabled={busyId === item.id} onClick={() => void remove(item)} type="button">
+                    Delete from library
+                  </button>
+                </div>
               </div>
             </article>
           ))}

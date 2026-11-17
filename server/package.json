@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/app.test.ts"
+    "test": "tsx --test src/app.test.ts src/services/media-service.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

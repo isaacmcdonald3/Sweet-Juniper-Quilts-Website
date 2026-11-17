@@ -18,6 +18,7 @@ import {
 } from "./services/cloudinary-service.js";
 import {
   MediaConflictError,
+  MediaDeletionError,
   MediaNotFoundError,
   createMediaService,
 } from "./services/media-service.js";
@@ -571,21 +572,6 @@ export function createApp(services: AppServices) {
     }
   });
 
-  admin.post("/media/:mediaId/retry-cleanup", async (request, response, next) => {
-    const mediaId = z.string().uuid().safeParse(request.params.mediaId);
-    if (!mediaId.success) {
-      response.status(400).json({ error: "Media address is invalid." });
-      return;
-    }
-    try {
-      response.json(
-        await services.media.retryLibraryMediaCleanup(getOwnerId(response), mediaId.data),
-      );
-    } catch (error) {
-      next(error);
-    }
-  });
-
   admin.get("/overview", async (_request, response, next) => {
     try {
       response.json(await services.admin.getOverview());
@@ -869,6 +855,10 @@ export function createApp(services: AppServices) {
     }
     if (error instanceof MediaNotFoundError) {
       response.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof MediaDeletionError) {
+      response.status(error.status).json({ error: error.message });
       return;
     }
     if (error instanceof UploadValidationError) {

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { CatalogProductMedia } from "@sweet-juniper/shared";
 
 interface FullscreenMediaViewerProps {
@@ -71,7 +72,7 @@ export function FullscreenMediaViewer({
     if (distance < 0 && !isLast) onIndexChange(currentIndex + 1);
   }
 
-  return (
+  return createPortal(
     <dialog
       aria-label={`${label} media viewer`}
       aria-modal="true"
@@ -150,6 +151,7 @@ export function FullscreenMediaViewer({
           {currentIndex + 1} / {media.length}
         </p>
       )}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

@@ -58,6 +58,11 @@ interface UploadFile {
 
 export class MediaNotFoundError extends Error {}
 export class MediaConflictError extends Error {}
+export class MediaDeletionError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 
 const librarySelection =
   "id,media_type,cloudinary_asset_id,cloudinary_public_id,original_filename,media_url,alt_text,poster_media_library_id,created_at,deleted_at,cleanup_pending_assets";
@@ -345,6 +350,7 @@ export function createMediaService(
     const { data, error } = await supabase
       .from("media_library")
       .select(librarySelection)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(2000);
     if (error) throw error;
@@ -382,7 +388,7 @@ export function createMediaService(
       .limit(1);
     if (assignmentError) throw assignmentError;
     if (assignments?.length) {
-      throw new MediaConflictError("Remove this media from its product or video poster assignments before deleting it.");
+      throw new MediaConflictError("Unassign this media from its product page or choose another product video poster before deleting it.");
     }
 
     const { data: otherPosters, error: posterError } = await supabase
@@ -392,7 +398,7 @@ export function createMediaService(
       .limit(1);
     if (posterError) throw posterError;
     if (otherPosters?.length) {
-      throw new MediaConflictError("Choose another poster before deleting this media.");
+      throw new MediaConflictError("Choose another video poster before deleting this media.");
     }
 
     const { data: content, error: contentError } = await supabase
@@ -405,7 +411,7 @@ export function createMediaService(
       row.cloudinary_public_id || "",
     ]);
     if (contentContainsReference(content, references)) {
-      throw new MediaConflictError("This media is selected for homepage or gallery content. Choose another before deleting it.");
+      throw new MediaConflictError("Remove this media from the Gallery or Homepage content before deleting it.");
     }
   }
 
@@ -442,49 +448,75 @@ export function createMediaService(
     return remaining.length;
   }
 
-  async function deleteLibraryMedia(actorId: string, mediaId: string): Promise<{ cleanupPending: number }> {
-    let row = await getLibraryMedia(mediaId);
-    if (!row.deleted_at) {
-      await assertLibraryMediaUnassigned(row);
-      const pending: PendingAsset[] = [
-        ...getPendingAssets(row.cleanup_pending_assets),
-        row.cloudinary_public_id
-          ? { publicId: row.cloudinary_public_id, resourceType: row.media_type }
-          : { assetId: row.cloudinary_asset_id, resourceType: row.media_type },
-      ];
-      const { data, error } = await supabase
-        .from("media_library")
-        .update({ deleted_at: new Date().toISOString(), cleanup_pending_assets: pending })
-        .eq("id", mediaId)
-        .select(librarySelection)
-        .single();
-      if (error) throw error;
-      row = data as MediaLibraryRow;
-      await audit(actorId, "media_library.removed", mediaId);
-    }
-    return { cleanupPending: await finishLibraryCleanup(row) };
-  }
-
-  async function finishLibraryCleanup(row: MediaLibraryRow): Promise<number> {
-    const cleanupPending = await retryCleanup(row);
-    if (cleanupPending === 0 && row.deleted_at) {
-      const { error } = await supabase.from("media_library").delete().eq("id", row.id);
-      if (error) throw error;
-    }
-    return cleanupPending;
-  }
-
-  async function retryLibraryMediaCleanup(
-    actorId: string,
-    mediaId: string,
-  ): Promise<{ cleanupPending: number }> {
+  async function deleteLibraryMedia(actorId: string, mediaId: string): Promise<{ deleted: true }> {
     const row = await getLibraryMedia(mediaId);
-    if (!row.deleted_at) {
-      throw new MediaConflictError("Media cleanup can only be retried after the library item is removed.");
+    await assertLibraryMediaUnassigned(row);
+
+    const assets: PendingAsset[] = [
+      ...getPendingAssets(row.cleanup_pending_assets),
+      row.cloudinary_public_id
+        ? { publicId: row.cloudinary_public_id, resourceType: row.media_type }
+        : { assetId: row.cloudinary_asset_id, resourceType: row.media_type },
+    ];
+    const uniqueAssets = new Map(
+      assets.map((asset) => [
+        "publicId" in asset
+          ? `${asset.resourceType}:public:${asset.publicId}`
+          : `${asset.resourceType}:asset:${asset.assetId}`,
+        asset,
+      ]),
+    );
+    let failedAssetCount = 0;
+
+    for (const asset of uniqueAssets.values()) {
+      try {
+        if ("publicId" in asset) {
+          await cloudinary.delete(asset.publicId, asset.resourceType);
+        } else {
+          await cloudinary.deleteByAssetId(asset.assetId, asset.resourceType);
+        }
+      } catch (error) {
+        logger.error(
+          {
+            err: error,
+            mediaId: row.id,
+            ...("publicId" in asset ? { publicId: asset.publicId } : { assetId: asset.assetId }),
+          },
+          "Cloudinary asset deletion failed",
+        );
+        failedAssetCount += 1;
+      }
     }
-    const cleanupPending = await finishLibraryCleanup(row);
-    await audit(actorId, "media_library.cleanup_retried", mediaId, { cleanupPending });
-    return { cleanupPending };
+
+    if (failedAssetCount) {
+      throw new MediaDeletionError(
+        "Cloudinary could not delete every media file. The library record was kept so you can retry safely.",
+        502,
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("media_library")
+      .delete()
+      .eq("id", mediaId)
+      .select("id")
+      .maybeSingle();
+    if (error) {
+      logger.error({ err: error, mediaId }, "Deleted Cloudinary media could not be removed from the database");
+      throw new MediaDeletionError(
+        "The Cloudinary files were deleted, but the Media Library record could not be removed. Retry deletion to finish cleanup.",
+        500,
+      );
+    }
+    if (!data) {
+      throw new MediaDeletionError(
+        "The Cloudinary files were deleted, but removal of the Media Library record could not be confirmed.",
+        500,
+      );
+    }
+
+    await audit(actorId, "media_library.deleted", mediaId);
+    return { deleted: true };
   }
 
   async function updateLibraryMedia(
@@ -680,7 +712,6 @@ export function createMediaService(
     replaceLibraryMedia,
     listAllMedia,
     deleteLibraryMedia,
-    retryLibraryMediaCleanup,
     updateLibraryMedia,
     addProductMedia,
     listProductMedia,
