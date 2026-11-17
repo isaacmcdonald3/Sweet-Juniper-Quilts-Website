@@ -86,7 +86,7 @@ export function ProductDetailPage() {
               ? "Made to order"
               : unavailable
                 ? "Currently unavailable"
-                : `${product.inventoryQuantity} ready to ship`}
+                : <strong>Only {product.inventoryQuantity} left in stock</strong>}
           </p>
           <p className="product-detail__description">{product.description || "A one-of-a-kind piece, carefully made in the studio."}</p>
           <div className="product-detail__purchase">
